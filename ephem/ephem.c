@@ -52,27 +52,21 @@ void init_site ( struct site * );
 void set_time ( struct time *, int, int, int );
 double gmst ( double );
 char * s_dms ( double );
+double hms ( int, int, double );
 
 void test_jd ( void );
+void test_st ( void );
 
 int
 main ( int argc, char **argv )
 {
-	struct time now;
-	double st;
-
 	init_site ( &site_info );
 
 	test_jd ();
+	printf ( "\n" );
+	test_st ();
 
-#ifdef notdef
-	set_time ( &now, 2018, 1, 1 );
-	st = gmst ( now.mjd ) * RADHR;
-	printf ( "STmid = %.7f\n", st );
-	s_dms ( st );
-#endif
-
-	printf ( "Done\n" );
+	// printf ( "Done\n" );
 }
 
 /* Let's test our mjd routine.
@@ -97,9 +91,15 @@ static void
 test_jd_one ( int year, double aa_jd )
 {
 	struct time now;
+	double err;
 
 	set_time ( &now, year, 1, 0 );
-	printf ( "jd (%d) = %.2f (%.2f)\n", year, now.mjd + MJD_OFFSET, aa_jd );
+
+	err = aa_jd - (now.mjd + MJD_OFFSET);
+	if ( fabs(err) < 0.0001 )
+	    printf ( "jd (%d) = %.2f (%.2f) OK\n", year, now.mjd + MJD_OFFSET, aa_jd );
+	else
+	    printf ( "jd (%d) = %.2f (%.2f) Error !!\n", year, now.mjd + MJD_OFFSET, aa_jd );
 }
 
 void
@@ -119,29 +119,53 @@ test_jd ( void )
 	test_jd_one ( 2018, 2458118.5 );
 }
 
-#ifdef notdef
+/* And let's test our sidereal time calculation.
+ * Once again, I have a bunch of ST values from the Astronomical Almanac.
+ * I looked up  Sideral Time at Midnight, Jan 1.
+ *        almanac page B12 in 2006
+ *        almanac page B13 in 2009, ... 2016
+ *        G. Sideral Time for Jan 1, 0h UT
+ */
+static void
+test_st_one ( int year, int h, int m, double s )
+{
+	struct time now;
+	double st;
+	double aa_st;
 
-# ----> STMID1 - Sideral Time at Midnight, Jan 1.
-#       almanac page B12 in 2006
-#       almanac page B13 in 2009, ... 2016
-#       G. Sideral Time for Jan 1, 0h UT
-# (2005) stmid = hms( 6.0, 42.0, 58.4748 )
-# (2006) stmid = hms( 6.0, 42.0, 1.5159 )
-# (2007) stmid = hms( 6.0, 41.0, 4.5504 )
-# (2008) stmid = hms( 6.0, 40.0, 7.5881 )
-# (2009) stmid = hms( 6.0, 43.0, 7.1394 )
-# (2010) stmid = hms( 6.0, 42.0, 10.0357 )
-# (2011) stmid = hms( 6.0, 41.0, 12.8088 )
-# (2012) stmid = hms( 6.0, 40.0, 15.4861 )
-# (2013) stmid = hms( 6.0, 43.0, 14.6094 )
-# (2014) stmid = hms( 6.0, 42.0, 17.058 )
-# (2015) stmid = hms( 6.0, 41.0, 19.4297 )
-# (2016) stmid = hms( 6.0, 40.0, 21.7893 )
-# (2017) stmid = hms( 6.0, 43.0, 20.7109 )
-# (2018) stmid = hms( 6.0, 42.0, 23.1082 )
-stmid = hms( 6.0, 42.0, 23.1082 )
+	aa_st = hms ( h, m, s );
 
-#endif
+	set_time ( &now, year, 1, 1 );
+	st = gmst ( now.mjd ) * RADHR;
+
+	// printf ( "AA-ST = %.6f\n", aa_st );
+	// printf ( "STmid = %.7f\n", st );
+	// printf ( "STmid = %s\n", s_dms ( st ) );
+
+	if ( fabs ( aa_st - st ) < 1.0 )
+	    printf ( "ST (%d): %s (%d:%d:%.3f) OK\n", year, s_dms(st), h, m, s );
+	else
+	    printf ( "ST (%d): %s (%d:%d:%.3f) -- ERROR !!\n", year, s_dms(st), h, m, s );
+}
+
+void
+test_st ( void )
+{
+	test_st_one ( 2005, 6, 42, 58.4748 );
+	test_st_one ( 2006, 6, 42, 1.5159 );
+	test_st_one ( 2007, 6, 41, 4.5504 );
+	test_st_one ( 2008, 6, 40, 7.5881 );
+	test_st_one ( 2009, 6, 43, 7.1394 );
+	test_st_one ( 2010, 6, 42, 10.0357 );
+	test_st_one ( 2011, 6, 41, 12.8088 );
+	test_st_one ( 2012, 6, 40, 15.4861 );
+	test_st_one ( 2013, 6, 43, 14.6094 );
+	test_st_one ( 2014, 6, 42, 17.058 );
+	test_st_one ( 2015, 6, 41, 19.4297 );
+	test_st_one ( 2016, 6, 40, 21.7893 );
+	test_st_one ( 2017, 6, 43, 20.7109 );
+	test_st_one ( 2018, 6, 42, 23.1082 );
+}
 
 double
 Frac ( double x )
@@ -155,10 +179,25 @@ Modulo ( double x, double y )
 	return y * Frac(x/y);
 }
 
+
+double
+hms ( int h, int m, double s )
+{
+	double rv;
+
+	rv = (double) m + s / 60.0;
+	rv = (double) h + rv / 60.0;
+	return rv;
+}
+
+/* encode into a d:m:s string
+ * (also works fine for h:m:s)
+ */
 char *
 s_dms ( double deg )
 {
 	int d, m;
+	static char buf[32];
 
 	d = floor ( deg );
 	deg -= d;
@@ -166,9 +205,15 @@ s_dms ( double deg )
 	m = floor ( deg );
 	deg -= m;
 	deg *= 60.0;
+
+	sprintf ( buf, "%d:%d:%.3f", d, m, deg );
+	return buf;
+
+	/*
 	printf ( "D = %d\n", d );
 	printf ( "M = %d\n", m );
 	printf ( "S = %.3f\n", deg );
+	*/
 }
 
 void
