@@ -25,9 +25,12 @@
 #define RADHR	(12.0/PI)
 #define SECPD	86400.0		/* seconds per day */
 
-/* Multiply an angle in radians by this to get arc-seconds */
-/* Or divide an angle in arc-seconds by this to get radians */
-#define ARCSEC	3600.0 * RADDEG
+/* Multiply by these to perform the indicated conversion */
+#define ASEC_TO_RAD	(DEGRAD / 3600.0)
+#define RAD_TO_ASEC	(3600.0 * RADDEG)	/* APC: Arcs */
+
+/* Arc seconds in a full circle */
+#define ARCSEC_360	1296000.0
 
 struct time {
 	int year;
@@ -409,52 +412,30 @@ Mjd ( struct time *tp )
 	return mjd;
 }
 
-/* From APC, page 38
- * This is a reduced version to calculate lunar position
- *  suitable for moonrise and moonset times
+/* Transform from ecliptic
+ *  to equatorial (ra, dec) coordinates.
+ * Starts with lat and long in radians.
+ * Yields ra in hours, dec in degrees.
  */
 void
-MiniMoon ( double t, double *ra, double *dec )
+ll_to_rd ( double ll_lat, double ll_long, double *ra, double *dec )
 {
-	static double eps = 23.43929111 * DEGRAD;
-	double l0, lm, ls, d, f;
-	double dl, s, h, n;
-	double l_moon, b_moon;
 	double cb, x, y, z, v, w, rho;
+	// static double eps = 23.43929111 * DEGRAD;
 	double coseps = 0.91748;	/* XXX */
 	double sineps = 0.39778;	/* XXX */
 
-	l0 = Frac ( 0.606433 + 1336.855225 * t);		/* mean longitude */
-	lm = TWOPI * Frac ( 0.374897 + 1325.552410 * t);	/* moon - mean anomaly */
-	ls = TWOPI * Frac ( 0.993133 + 99.997361 * t);	/* sun - mean anomaly */
-	d = TWOPI * Frac ( 0.827361 + 1236.853086 * t);	/* diff - long, moon-sun */
-	f = TWOPI * Frac ( 0.259086 + 1342.227825 * t);	/* dist from ascending node */
-
-	// Perturbations in long and lat
-	dl = 22640 * sin(lm) - 4586 * sin(lm-2*d) + 2370 * sin(2*d) + 769 * sin(2*lm)
-	    -668*sin(ls) - 412 * sin(2*f) - 212 * sin(2*lm-2*d) - 206 * sin(lm+ls-2*d)
-	    +192 * sin(lm+2*d) - 165 * sin(ls-2*d) - 125 * sin(d) - 110 * sin(lm+ls)
-	    +148 * sin(lm-ls) - 55 * sin(2*f-2*d);
-
-	s = f + (dl + 412*sin(2*f) + 541 * sin(ls)) / ARCSEC;
-	h = f - 2*d;
-	n = -526 * sin(h) + 44 * sin(lm+h) - 31 * sin(-lm+h) -23 * sin(ls+h)
-	    + 11 * sin(-ls+h) - 25 * sin(-2*lm+f) + 21 * sin(-lm + f);
-
-	// Ecliptic long and lat
-	l_moon = TWOPI * Frac ( l0 + dl/1296.0e3 );	/* radians */
-	b_moon = ( 18520.0 * sin(s) + n ) / ARCSEC;
-
 	// Transform to equatorial coordinates
 #ifdef MOON_MATRIX
-	e_moon = R_x(-eps) * Vec3D(Polar(l_moon,b_moon));
+	e_moon = R_x(-eps) * Vec3D(Polar(ll_long,ll_lat));
 	*ra = e_moon[phi];
 	*dec = e_moon[theta];
 #else
-	cb = cos ( b_moon );
-	x = cb * cos ( l_moon );
-	v = cb * sin ( l_moon );
-	w = sin ( b_moon );
+	cb = cos ( ll_lat );
+	x = cb * cos ( ll_long );
+	v = cb * sin ( ll_long );
+	w = sin ( ll_lat );
+
 	y = coseps * v - sineps * w;
 	z = sineps * v + coseps * w;
 	rho = sqrt ( 1.0 - z*z );
@@ -462,6 +443,63 @@ MiniMoon ( double t, double *ra, double *dec )
 	*ra = RADHR * atan ( y / (x + rho) );
 	if ( *ra < 0.0 ) *ra += 24.0;
 #endif
+}
+
+/* From APC, page 38
+ * This is a reduced version to calculate lunar position
+ *  suitable for moonrise and moonset times
+ */
+void
+MiniMoon ( double t, double *ra, double *dec )
+{
+	double l0, lm, ls, d, f;
+	double dl, s, h, n;
+	double l_moon, b_moon;
+
+	l0 = Frac ( 0.606433 + 1336.855225 * t);	/* mean longitude (in degrees/360) */
+
+	lm = TWOPI * Frac ( 0.374897 + 1325.552410 * t);	/* moon - mean anomaly */
+	ls = TWOPI * Frac ( 0.993133 + 99.997361 * t);		/* sun - mean anomaly */
+	d = TWOPI * Frac ( 0.827361 + 1236.853086 * t);	/* diff - long, moon-sun */
+	f = TWOPI * Frac ( 0.259086 + 1342.227825 * t);	/* dist from ascending node */
+
+	// Perturbations in long and lat (yields arc seconds)
+	dl = 22640.0 * sin(lm) - 4586.0 * sin(lm-2.0*d) + 2370.0 * sin(2.0*d) + 769.0 * sin(2.0*lm)
+	    - 668.0*sin(ls) - 412.0 * sin(2.0*f) - 212.0 * sin(2.0*lm-2.0*d) - 206.0 * sin(lm+ls-2.0*d)
+	    + 192.0 * sin(lm+2.0*d) - 165.0 * sin(ls-2.0*d) - 125.0 * sin(d) - 110.0 * sin(lm+ls)
+	    + 148.0 * sin(lm-ls) - 55.0 * sin(2.0*f-2.0*d);
+
+	s = f + (dl + 412.0*sin(2.0*f) + 541.0 * sin(ls)) * ASEC_TO_RAD;
+	h = f - 2.0*d;
+	n = -526.0 * sin(h) + 44.0 * sin(lm+h) - 31.0 * sin(-lm+h) -23.0 * sin(ls+h)
+	    + 11.0 * sin(-ls+h) - 25.0 * sin(-2.0*lm+f) + 21.0 * sin(-lm + f);
+
+	// l_moon is ecliptic longitude
+	// b_moon is ecliptic latitude
+	//    This yields both in radians.
+	l_moon = TWOPI * Frac ( l0 + dl / ARCSEC_360 );
+	b_moon = ( 18520.0 * sin(s) + n ) * ASEC_TO_RAD;
+
+	ll_to_rd ( b_moon, l_moon, ra, dec );
+}
+
+/* From APC, page 39
+ * This is a reduced version to calculate solar positions
+ *  suitable for sunrise and sunset times.
+ * Note that the sun always is in the ecliptic plane, so the
+ *  solar ecliptic latitude is always zero.
+ */
+void
+MiniSun ( double t, double *ra, double *dec )
+{
+	double m;
+	double sun_long;
+
+	m = TWOPI * Frac ( 0.993133 + 99.997361 * t );
+	sun_long = TWOPI * Frac ( 0.7859453 + m / TWOPI +
+	    (6893.0 * sin(m) + 72.0 * sin(2.0*m) + 6191.2 * t ) / ARCSEC_360 );
+
+	ll_to_rd ( 0.0, sun_long, ra, dec );
 }
 
 void
