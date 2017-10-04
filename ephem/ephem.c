@@ -50,9 +50,11 @@ struct site site_info;
 
 void init_site ( struct site * );
 void set_time ( struct time *, int, int, int );
-double gmst ( double );
-char * s_dms ( double );
+double apc_st ( double );
+char * s_dms ( char *, double );
 double hms ( int, int, double );
+double mmt_st ( double );
+double mmt_lst ( double );
 
 void test_jd ( void );
 void test_st ( void );
@@ -125,27 +127,28 @@ test_jd ( void )
  *        almanac page B12 in 2006
  *        almanac page B13 in 2009, ... 2016
  *        G. Sideral Time for Jan 1, 0h UT
+ * Note that these are NOT local, but at Greenwich.
  */
 static void
 test_st_one ( int year, int h, int m, double s )
 {
 	struct time now;
-	double st;
-	double aa_st;
+	double st_apc;
+	double st_aa;
+	double st_mmt;
+	char apc_buf[32];
+	char mmt_buf[32];
 
-	aa_st = hms ( h, m, s );
+	st_aa = hms ( h, m, s );
 
 	set_time ( &now, year, 1, 1 );
-	st = gmst ( now.mjd ) * RADHR;
+	st_apc = apc_st ( now.mjd ) * RADHR;
+	st_mmt = mmt_st ( now.mjd + MJD_OFFSET );
 
-	// printf ( "AA-ST = %.6f\n", aa_st );
-	// printf ( "STmid = %.7f\n", st );
-	// printf ( "STmid = %s\n", s_dms ( st ) );
-
-	if ( fabs ( aa_st - st ) < 1.0 )
-	    printf ( "ST (%d): %s (%d:%d:%.3f) OK\n", year, s_dms(st), h, m, s );
+	if ( fabs ( st_aa - st_apc ) < 1.0 )
+	    printf ( "ST (%d): %s %s (%d:%d:%.3f) OK\n", year, s_dms(apc_buf,st_apc), s_dms(mmt_buf,st_mmt), h, m, s );
 	else
-	    printf ( "ST (%d): %s (%d:%d:%.3f) -- ERROR !!\n", year, s_dms(st), h, m, s );
+	    printf ( "ST (%d): %s %s (%d:%d:%.3f) -- ERROR !!\n", year, s_dms(apc_buf,st_apc), s_dms(mmt_buf,st_mmt), h, m, s );
 }
 
 void
@@ -194,10 +197,9 @@ hms ( int h, int m, double s )
  * (also works fine for h:m:s)
  */
 char *
-s_dms ( double deg )
+s_dms ( char *buf, double deg )
 {
 	int d, m;
-	static char buf[32];
 
 	d = floor ( deg );
 	deg -= d;
@@ -229,9 +231,15 @@ init_site ( struct site *sp )
 	sp->tz = TIMEZONE;		/* hours from greenwich */
 }
 
-/* Sidereal time at Greenwich */
+/* Sidereal time at Greenwich
+ * This is from the book "Astronomy on the Personal Computer"
+ *  Fourth edition, page 40.
+ *  It yields results accurate to about a second, but gives
+ *   inferior results compared with the MMT routine.
+ */
 double
-gmst ( double mjd )
+// gmst ( double mjd )
+apc_st ( double mjd )
 {
 	double mjd0;
 	double ut, gmst;
@@ -239,10 +247,13 @@ gmst ( double mjd )
 
 	mjd0 = floor ( mjd );
 	ut = (mjd - mjd0) * SECPD;
+
 	t0 = (mjd0 - 51544.5) / 36525.0;
 	t = (mjd - 51544.5) / 36525.0;
+
 	gmst = 24110.54841 + 8640184.812866*t0 + 1.0027379093*ut
 	    + (0.093104-6.2e-6*t)*t*t;
+
 	return (TWOPI/SECPD) * Modulo(gmst,SECPD);
 }
 
@@ -258,22 +269,62 @@ gmst ( double mjd )
 #define SECPERDAY  	86400.0
 #define JD_1970		2440587.5
 
-double
-mmt_lst ( double sec )
+/* The mount computer at the MMT keeps track of UT time as
+ * seconds since 1970, so in theory it could use this
+ * interface (but it doesn't).
+ * It actually calls something called synch_lst which
+ * computes LST based on values in its time_info structure
+ * and placing those LST values into the time_info structure.
+ * It also keeps these time values as integer seconds along
+ * with a fractional value kept as nanosecond counts.
+ */
+
 // void synch_lst ( void )
+double
+mmt_lst_ticks ( double sec )
 {
-        double t0, t, gmst, omega, e, last, lst;
         double utc, ut1;
-        double jd, jd0;
-        double lst_sec;
-        // double sec;
+	double lst_sec;
+	double jd;
 
         /* utc since 1970 in seconds */
         // sec = time_info.ut.tv_sec;
         // sec += time_info.ut.tv_nsec / 1.e9;
 
         /* Calculate utc for the current day in hours */
-        utc = fmod ( sec, 86400.0 ) / 3600.0;
+        utc = fmod ( sec, SECPERDAY) / 3600.0;
+        // ut1 = utc + time_info.dut / 3600.0;
+        ut1 = utc;
+
+        /* JD right now */
+        jd = sec / SECPERDAY + JD_1970;
+
+        lst_sec = mmt_lst ( jd ) * 3600.0;
+        // time_info.lst.tv_sec = lst_sec;
+        // time_info.lst.tv_nsec = (lst_sec - (double) time_info.lst.tv_sec) * 1.e9;
+	return lst_sec;
+}
+
+/* Return the Greenwich ST in hours 
+ */
+double
+mmt_st ( double jd )
+{
+        double t0, t;
+        double jd0, ut1;
+	double gmst, omega, e;
+	double sec;
+
+	sec = (jd - JD_1970) * SECPERDAY;
+        ut1 = fmod ( sec, SECPERDAY ) / 3600.0;
+        jd0 = jd - ut1 / 24.0;
+	// printf ( "MMT jd, sec, ut1, jd0: %.6f %.6f %.6f %.6f\n", jd, sec, ut1, jd0 );
+
+#ifdef notdef
+        /* Calculate utc within the current day in hours
+	 *  (i.e. a fraction of a day)
+	 */
+        utc = fmod ( sec, SECPERDAY ) / 3600.0;
         // ut1 = utc + time_info.dut / 3600.0;
         ut1 = utc;
 
@@ -282,6 +333,7 @@ mmt_lst ( double sec )
 
         /* JD today at 0h UTC */
         jd0 = jd - ut1 / 24.0;
+#endif
 
         /* 2451545 is JD for Jan 1.5, 2000 */
         t0 = (jd0 - 2451545.0) / 36525.0;
@@ -292,21 +344,35 @@ mmt_lst ( double sec )
 
         omega = 2.182438586 - 33.75704592 * t + 36.145769e-6 * t * t;
 
-        e = -2.9e-4 * sin (omega);
+        // e = -2.9e-4 * sin (omega);
 
 	/* The following in units of hours */
         // last = gmst - site_info.geodetic_long_h + e;
-        last = gmst - site_info.long_hours + e;
+        // last = gmst - site_info.long_hours + e;
+        // lst = gmst + e;
 
-        lst = fmod (last, 24.0);
-        if (lst < 0.0)
-            lst = lst + 24.0;
+        gmst -= 2.9e-4 * sin (omega);
 
-        lst_sec = lst * 3600.0;
-        // time_info.lst.tv_sec = lst_sec;
-        // time_info.lst.tv_nsec = (lst_sec - (double) time_info.lst.tv_sec) * 1.e9;
-	return lst_sec;
+        gmst = fmod (gmst, 24.0);
+        if (gmst < 0.0)
+            gmst += 24.0;
+
+	return gmst;
 }
+
+double
+mmt_lst ( double jd )
+{
+	double lst;
+
+	lst =  mmt_st ( jd ) - site_info.long_hours;
+        if (lst < 0.0)
+            lst += 24.0;
+        if (lst > 24.0)
+            lst -= 24.0;
+	return lst;
+}
+
 #endif
 
 
