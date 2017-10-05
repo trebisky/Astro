@@ -6,6 +6,7 @@
 
 /* Note that the international convention for longitude is positive to the east,
  * so all these longitude coordinates in Arizona ought to be negative.
+ * Maybe the timezones should be negative too.
  * XXX XXX
  */
 /* These are for the MMT (Mt. Hopkins) */
@@ -23,6 +24,23 @@
 #define LATITUDE        32.70133333     /* site latitude in degrees */
 #define LONGITUDE       7.326103704     /* site longitude in hours west */
 #define ELEVATION       3.171           /* site elevation in kilometers */
+#define TIMEZONE	7.0		/* hours from greenwich */
+
+/* These are for Greenwich, England */
+#define LATITUDE        51.476852
+#define LONGITUDE       (0.000500 * 24.0 / 360.0)	/* 1.8 arc-seconds West */
+#define ELEVATION       0.046				/* 46 meters */
+#define TIMEZONE	0.0
+
+/* These are for Castellon, Tucson, Arizona */
+#define LATITUDE        32.2627640
+#define LONGITUDE       111.0485611	/* West */
+#define ELEVATION       0.736092	/* 2415 feet */
+#define TIMEZONE	7.0		/* hours from greenwich */
+/*
+#define LATITUDE        32:15:45.909
+#define LONGITUDE       111:02:54.82
+*/
 #endif
 
 #define PI	3.14159265358979324
@@ -288,32 +306,35 @@ quad ( double ya, double yb, double yc, double *xe, double *ye, double *r1, doub
 static void
 sun_events ( struct time *now,
 	double *lt_rise, double *lt_set,
-	int *rises, int *sets, int *above )
+	int *arises, int *asets, int *aabove )
 {
 	double ya, yb, yc;
 	double hour;
 	double xe, ye, r1, r2;
 	int nr;
+	int rises, sets, above;
 
-	*rises = 0;
-	*sets = 0;
-	*above = 0;
+	rises = 0;
+	sets = 0;
+	above = 0;
+	hour = 1.0;
 
 	ya = sun_alt ( now, hour - 1.0, 0 );
 	if ( ya > 0.0 )
-	    *above = 1;
+	    above = 1;
 
 	do {
 	    yb = sun_alt ( now, hour, 0 );
 	    yc = sun_alt ( now, hour + 1.0, 0 );
 	    nr = quad ( ya, yb, yc, &xe, &ye, &r1, &r2 );
+	    printf ( "abc = %.3f %.3f %.3f  %d\n", ya, yb, yc, nr );
 	    if ( nr == 1 ) {
 		if ( ya < 0.0 ) {
 		    *lt_rise = hour + r1;
-		    *rises = 1;
+		    rises = 1;
 		} else {
 		    *lt_set = hour + r1;
-		    *sets = 1;
+		    sets = 1;
 		}
 	    }
 	    if ( nr == 2 ) {
@@ -324,13 +345,17 @@ sun_events ( struct time *now,
 		    *lt_rise = hour + r1;
 		    *lt_set = hour + r2;
 		}
-		*rises = 1;
-		*sets = 1;
+		rises = 1;
+		sets = 1;
 	    }
 
 	    ya = yc;
 	    hour += 2.0;
-	} while ( hour < 25.0 && *rises == 0 && *sets == 0 );
+	} while ( hour < 25.0 && rises + sets < 2 );
+
+	*arises = rises;
+	*asets = sets;
+	*aabove = above;
 }
 
 static void
