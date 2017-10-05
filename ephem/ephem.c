@@ -81,7 +81,8 @@ void MiniMoon ( double, double *, double * );
 
 void test_jd ( void );
 void test_st ( void );
-void test_sun ( void );
+void test_sun1 ( void );
+void test_sun2 ( void );
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -97,7 +98,9 @@ main ( int argc, char **argv )
 	// printf ( "\n" );
 	// test_st ();
 
-	test_sun ();
+	test_sun1 ();
+	printf ( "\n" );
+	test_sun2 ();
 
 	// printf ( "Done\n" );
 }
@@ -201,8 +204,8 @@ test_st ( void )
 	test_st_one ( 2018, 6, 42, 23.1082 );
 }
 
-static void
-test_sun_one ( struct time *now, double hour )
+static double
+sun_alt ( struct time *now, double hour, int verbose )
 {
 	double jd;
 	double lst;
@@ -245,11 +248,99 @@ test_sun_one ( struct time *now, double hour )
 
 	sinalt = site_info.sin_lat * sin(dec*DEGRAD) + site_info.cos_lat * cos(dec*DEGRAD)*cos(ha*HRRAD);
 	alt = asin ( sinalt ) * RADDEG;
-	printf ( "Hour: %6.2f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
+	if ( verbose )
+	    printf ( "Hour: %6.2f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
+
+	return alt;
+}
+
+static int
+quad ( double ya, double yb, double yc, double *xe, double *ye, double *r1, double *r2 )
+{
+	double a, b, c;
+	double disc;
+	double dx;
+	double lxe;
+	int nr = 0;
+
+	a = 0.5 * ( ya + yc ) - yb;
+	b = 0.5 * ( yc - ya );
+	c = yb;
+
+	*xe = lxe = -b / (2.0 * a);
+	*ye = (a*lxe + b) * lxe + c;
+	disc = b * b - 4.0 * a * c;
+
+	if ( disc < 0.0 )
+	    return 0;
+
+	dx = 0.5 * sqrt(disc) / fabs(a);
+	*r1 = lxe - dx;
+	*r2 = lxe + dx;
+	if ( fabs(*r1) <= 1.0 ) ++nr;
+	if ( fabs(*r2) <= 1.0 ) ++nr;
+	if ( *r1 < -1.0 ) *r1 = *r2;
+	return nr;
+}
+
+/* Find the sunrise and sunset times for a given day.
+ */
+static void
+sun_events ( struct time *now,
+	double *lt_rise, double *lt_set,
+	int *rises, int *sets, int *above )
+{
+	double ya, yb, yc;
+	double hour;
+	double xe, ye, r1, r2;
+	int nr;
+
+	*rises = 0;
+	*sets = 0;
+	*above = 0;
+
+	ya = sun_alt ( now, hour - 1.0, 0 );
+	if ( ya > 0.0 )
+	    *above = 1;
+
+	do {
+	    yb = sun_alt ( now, hour, 0 );
+	    yc = sun_alt ( now, hour + 1.0, 0 );
+	    nr = quad ( ya, yb, yc, &xe, &ye, &r1, &r2 );
+	    if ( nr == 1 ) {
+		if ( ya < 0.0 ) {
+		    *lt_rise = hour + r1;
+		    *rises = 1;
+		} else {
+		    *lt_set = hour + r1;
+		    *sets = 1;
+		}
+	    }
+	    if ( nr == 2 ) {
+		if ( ye < 0.0 ) {
+		    *lt_rise = hour + r2;
+		    *lt_set = hour + r1;
+		} else {
+		    *lt_rise = hour + r1;
+		    *lt_set = hour + r2;
+		}
+		*rises = 1;
+		*sets = 1;
+	    }
+
+	    ya = yc;
+	    hour += 2.0;
+	} while ( hour < 25.0 && *rises == 0 && *sets == 0 );
+}
+
+static void
+test_sun_one ( struct time *now, double hour )
+{
+	    (void) sun_alt ( now, hour, 1 );
 }
 
 void
-test_sun ( void )
+test_sun1 ( void )
 {
 	double hour;
 	struct time now;
@@ -260,6 +351,20 @@ test_sun ( void )
 	for ( hour = 0.0; hour < 23.5; hour += 1.0 ) {
 	    test_sun_one ( &now, hour );
 	}
+}
+
+void
+test_sun2 ( void )
+{
+	struct time now;
+	double lt_rise, lt_set;
+	int rises, sets, above;
+
+	// set_time ( &now, 2017, 10, 5 );
+	set_time ( &now, 2017, 10, 4 );
+
+	sun_events ( &now, &lt_rise, &lt_set, &rises, &sets, &above );
+	printf ( "Sun rise and set: %.3f %.3f\n", lt_rise, lt_set );
 }
 
 /* ------------------------------------------------------------------------ */
