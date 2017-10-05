@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <math.h>
 
+/* (c) Tom Trebisky  10-4-2017
+ */
+
+/* Note that the international convention for longitude is positive to the east,
+ * so all these longitude coordinates in Arizona ought to be negative.
+ * XXX XXX
+ */
 /* These are for the MMT (Mt. Hopkins) */
 #define LATITUDE        31.68877778     /* site latitude in degrees */
 #define LONGITUDE       7.392303704     /* site longitude in hours west */
@@ -23,20 +30,30 @@
 #define DEGRAD	(PI/180.0)
 #define RADDEG	(180.0/PI)
 #define RADHR	(12.0/PI)
-#define SECPD	86400.0		/* seconds per day */
+#define HRRAD	(PI/12.0)
+
+/* Seconds of time in a day.
+ * i.e. 24*60*60
+ */
+#define SECPD	86400.0
 
 /* Multiply by these to perform the indicated conversion */
 #define ASEC_TO_RAD	(DEGRAD / 3600.0)
 #define RAD_TO_ASEC	(3600.0 * RADDEG)	/* APC: Arcs */
 
-/* Arc seconds in a full circle */
+#define JULIAN_CENTURY	36525.0		/* Days in a Julian century */
+#define MJD_2000	51544.5		/* MJD for J2000 epoch */
+
+/* Arc seconds in a full circle.
+ * i.e. 360*60*60
+ */
 #define ARCSEC_360	1296000.0
 
 struct time {
 	int year;
 	int month;
 	int day;
-	double mjd;
+	double mjd0;
 };
 
 struct site {
@@ -47,9 +64,9 @@ struct site {
 	double longitude;
 	double elevation;
 	double tz;
+	double sin_lat;
+	double cos_lat;
 };
-
-struct site site_info;
 
 void init_site ( struct site * );
 void set_time ( struct time *, int, int, int );
@@ -59,17 +76,28 @@ double hms ( int, int, double );
 double mmt_st ( double );
 double mmt_lst ( double );
 
+void MiniSun ( double, double *, double * );
+void MiniMoon ( double, double *, double * );
+
 void test_jd ( void );
 void test_st ( void );
+void test_sun ( void );
+
+/* ------------------------------------------------------------------------ */
+/* ------------------------------------------------------------------------ */
+
+struct site site_info;
 
 int
 main ( int argc, char **argv )
 {
 	init_site ( &site_info );
 
-	test_jd ();
-	printf ( "\n" );
-	test_st ();
+	// test_jd ();
+	// printf ( "\n" );
+	// test_st ();
+
+	test_sun ();
 
 	// printf ( "Done\n" );
 }
@@ -100,11 +128,11 @@ test_jd_one ( int year, double aa_jd )
 
 	set_time ( &now, year, 1, 0 );
 
-	err = aa_jd - (now.mjd + MJD_OFFSET);
+	err = aa_jd - (now.mjd0 + MJD_OFFSET);
 	if ( fabs(err) < 0.0001 )
-	    printf ( "jd (%d) = %.2f (%.2f) OK\n", year, now.mjd + MJD_OFFSET, aa_jd );
+	    printf ( "jd (%d) = %.2f (%.2f) OK\n", year, now.mjd0 + MJD_OFFSET, aa_jd );
 	else
-	    printf ( "jd (%d) = %.2f (%.2f) Error !!\n", year, now.mjd + MJD_OFFSET, aa_jd );
+	    printf ( "jd (%d) = %.2f (%.2f) Error !!\n", year, now.mjd0 + MJD_OFFSET, aa_jd );
 }
 
 void
@@ -145,8 +173,8 @@ test_st_one ( int year, int h, int m, double s )
 	st_aa = hms ( h, m, s );
 
 	set_time ( &now, year, 1, 1 );
-	st_apc = apc_st ( now.mjd ) * RADHR;
-	st_mmt = mmt_st ( now.mjd + MJD_OFFSET );
+	st_apc = apc_st ( now.mjd0 ) * RADHR;
+	st_mmt = mmt_st ( now.mjd0 + MJD_OFFSET );
 
 	if ( fabs ( st_aa - st_apc ) < 1.0 )
 	    printf ( "ST (%d): %s %s (%d:%d:%.3f) OK\n", year, s_dms(apc_buf,st_apc), s_dms(mmt_buf,st_mmt), h, m, s );
@@ -173,6 +201,72 @@ test_st ( void )
 	test_st_one ( 2018, 6, 42, 23.1082 );
 }
 
+static void
+test_sun_one ( struct time *now, double hour )
+{
+	double jd;
+	double lst;
+	double ha;
+	char buf[32];
+	double mjd;
+	double t;
+	double ra, dec;
+	double sinalt;
+	double alt;
+
+	// printf ( " MJD = %.2f\n", now->mjd );
+	/*
+	 * On October 4, using the MMT mount computer, I get:
+	 *  time WED OCT 04 16:22:50 2017
+	 *  uttime 23:22:50
+	 *  jd 2458031.47420
+	 *  mjd 58030.97420
+	 *  lst 16:54:38.872
+	 * This code calculates (given this JD):
+	 *  LST = 16:54:38.779
+	 */
+
+	mjd = now->mjd0 + (hour + site_info.long_hours) / 24.0;
+	jd = mjd + MJD_OFFSET;
+	// jd = 2458031.47420;
+	lst =  mmt_st ( jd ) - site_info.long_hours;
+	if ( lst < 0.0 ) lst += 24.0;
+	if ( lst > 24.0 ) lst -= 24.0;
+	// printf ( "Hour: %6.2f, JD = %.2f, LST = %s\n", hour, jd, s_dms(buf,lst) );
+	/* OK to here XXX XXX */
+
+	t = ( mjd - MJD_2000 ) / JULIAN_CENTURY;
+	// printf ( "mjd = %.2f, T = %.7f\n", mjd, t );
+	MiniSun ( t, &ra, &dec );
+
+	/* Convert to alt, az */
+	ha = lst - ra;
+	// printf ( "Hour: %6.2f, JD = %.2f, LST = %s HA = %.2f\n", hour, jd, s_dms(buf,lst), ha );
+
+	sinalt = site_info.sin_lat * sin(dec*DEGRAD) + site_info.cos_lat * cos(dec*DEGRAD)*cos(ha*HRRAD);
+	alt = asin ( sinalt ) * RADDEG;
+	printf ( "Hour: %6.2f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
+}
+
+void
+test_sun ( void )
+{
+	double hour;
+	struct time now;
+
+	// set_time ( &now, 2017, 10, 5 );
+	set_time ( &now, 2017, 10, 4 );
+
+	for ( hour = 0.0; hour < 23.5; hour += 1.0 ) {
+	    test_sun_one ( &now, hour );
+	}
+}
+
+/* ------------------------------------------------------------------------ */
+/* ------------------------------------------------------------------------ */
+
+#define OLD_APC
+#ifdef OLD_APC
 double
 Frac ( double x )
 {
@@ -184,7 +278,11 @@ Modulo ( double x, double y )
 {
 	return y * Frac(x/y);
 }
-
+#else
+/* linux libraries have these ... */
+#define Modulo(x,y)	fmod(x,y)
+#define Frac(x,y)	remainder(x,y)
+#endif
 
 double
 hms ( int h, int m, double s )
@@ -232,6 +330,9 @@ init_site ( struct site *sp )
 	sp->longitude = sp->long_deg * DEGRAD;
 	sp->elevation = ELEVATION;      /* site elevation in kilometers (never used) */
 	sp->tz = TIMEZONE;		/* hours from greenwich */
+
+	sp->sin_lat = sin(sp->latitude);
+	sp->cos_lat = cos(sp->latitude);
 }
 
 /* Sidereal time at Greenwich
@@ -375,16 +476,14 @@ mmt_lst ( double jd )
             lst -= 24.0;
 	return lst;
 }
-
 #endif
-
 
 /* Calculate the MJD for a given year, month, and day
  *  For years after 1582, we are using the Gregorian calendar,
  *  so for my purposes we could eliminate the test below.
  */
 double 
-Mjd ( struct time *tp )
+calc_mjd ( struct time *tp )
 {
 	int m;
 	int y;
@@ -412,6 +511,23 @@ Mjd ( struct time *tp )
 	return mjd;
 }
 
+/* Obliquity of the ecliptic
+ * t = julian centuries from 2000 January  1 (12h)
+ * (Julian century is always 36525 days)
+ */
+double
+calc_eps ( double jd )
+{
+	double rv;
+	double t;
+
+	t = ( jd - 2451545.0) / 36525.0;
+	rv = 23.43929111 - (46.8150 + ( 0.00059 - 0.001813 * t)*t)*t/3600.0;
+	return rv * DEGRAD;
+	// return 23.43929111 * DEGRAD;
+	// return 23.5 * DEGRAD;
+}
+
 /* Transform from ecliptic
  *  to equatorial (ra, dec) coordinates.
  * Starts with lat and long in radians.
@@ -421,7 +537,6 @@ void
 ll_to_rd ( double ll_lat, double ll_long, double *ra, double *dec )
 {
 	double cb, x, y, z, v, w, rho;
-	// static double eps = 23.43929111 * DEGRAD;
 	double coseps = 0.91748;	/* XXX */
 	double sineps = 0.39778;	/* XXX */
 
@@ -440,7 +555,7 @@ ll_to_rd ( double ll_lat, double ll_long, double *ra, double *dec )
 	z = sineps * v + coseps * w;
 	rho = sqrt ( 1.0 - z*z );
 	*dec = RADDEG * atan ( z / rho );
-	*ra = RADHR * atan ( y / (x + rho) );
+	*ra = 2.0 * RADHR * atan ( y / (x + rho) );
 	if ( *ra < 0.0 ) *ra += 24.0;
 #endif
 }
@@ -448,6 +563,8 @@ ll_to_rd ( double ll_lat, double ll_long, double *ra, double *dec )
 /* From APC, page 38
  * This is a reduced version to calculate lunar position
  *  suitable for moonrise and moonset times
+ *
+ * t = time in julian centuries since J2000
  */
 void
 MiniMoon ( double t, double *ra, double *dec )
@@ -483,11 +600,37 @@ MiniMoon ( double t, double *ra, double *dec )
 	ll_to_rd ( b_moon, l_moon, ra, dec );
 }
 
+void
+checksun ( void )
+{
+	double jd;
+	double n, l, g, g2, ll;
+
+	jd = 2458031.47420;
+	n = jd - 2451545.0;
+	l = 280.460 + 0.9856474 * n;	/* mean long - degrees */
+	g = 357.528 + 0.9856003 * n;	/* anomaly - degrees */
+
+	// printf ( "Check, l, g = %.2f %.2f\n", l, g );
+	l = fmod ( l, 360.0 );
+	g = fmod ( g, 360.0 );
+	printf ( "Check, l, g = %.2f %.2f\n", l, g );
+
+	g2 = g + g;
+	g2 = fmod ( g2, 360.0 );
+
+	ll = l + 1.915 * sin(g*DEGRAD) + 0.020 * sin(g2*DEGRAD);
+	printf ( "Check, solar long (deg) = %.3f\n", ll );
+}
+
 /* From APC, page 39
  * This is a reduced version to calculate solar positions
  *  suitable for sunrise and sunset times.
  * Note that the sun always is in the ecliptic plane, so the
  *  solar ecliptic latitude is always zero.
+ * (it never exceeds 0.00033 degrees).
+ *
+ * t = time in julian centuries since J2000
  */
 void
 MiniSun ( double t, double *ra, double *dec )
@@ -499,6 +642,10 @@ MiniSun ( double t, double *ra, double *dec )
 	sun_long = TWOPI * Frac ( 0.7859453 + m / TWOPI +
 	    (6893.0 * sin(m) + 72.0 * sin(2.0*m) + 6191.2 * t ) / ARCSEC_360 );
 
+	// printf ( "MiniSun, solar long = %.3f\n", sun_long * RADDEG );
+
+	// checksun ();
+
 	ll_to_rd ( 0.0, sun_long, ra, dec );
 }
 
@@ -508,23 +655,7 @@ set_time ( struct time *tp, int y, int m, int d )
 	tp->year = y;
 	tp->month = m;
 	tp->day = d;
-	tp->mjd = Mjd ( tp );
-}
-
-/* Obliquity of the ecliptic
- * t = julian centuries from 2000 January  1 (12h)
- * (Julian century is always 36525 days)
- */
-double
-calc_eps ( double jd )
-{
-	double rv;
-	double t;
-
-	t = ( jd - 2451545.0) / 36525.0;
-	rv = 23.43929111 - (46.8150 + ( 0.00059 - 0.001813 * t)*t)*t/3600.0;
-	return rv * DEGRAD;
-	// return 23.5 * DEGRAD;
+	tp->mjd0 = calc_mjd ( tp );
 }
 
 /* THE END */
