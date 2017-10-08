@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
 /* (c) Tom Trebisky  10-4-2017
  */
@@ -14,11 +15,12 @@ struct site_data {
 	double long_deg;
 	double elevation;
 	double tz;
+	char *name;
 };
 
-struct site_data site_mmt = { 31.68877778, -110.88456, 2606.0, -7.0 };
-struct site_data site_castellon = { 32.2627640, -111.0485611, 736.092, -7.0 };
-struct site_data site_tucson = { 32.195, -110.892, 700.0, -7.0 };
+struct site_data site_mmt = { 31.68877778, -110.88456, 2606.0, -7.0, "mmt" };
+struct site_data site_castellon = { 32.2627640, -111.0485611, 736.092, -7.0, "castellon" };
+struct site_data site_tucson = { 32.195, -110.892, 700.0, -7.0, "tucson" };
 
 /* These are for the MMT (Mt. Hopkins) */
 #define LATITUDE        31.68877778     /* site latitude in degrees */
@@ -106,6 +108,7 @@ struct site {
 	double tz;
 	double sin_lat;
 	double cos_lat;
+	char name[64];
 };
 
 void init_site ( struct site *, struct site_data * );
@@ -124,7 +127,8 @@ void test_jd ( void );
 void test_st ( void );
 void test_sun1 ( void );
 void test_sun2 ( void );
-void test_sun3 ( void );
+void test_sun3a ( void );
+void test_sun3b ( void );
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -143,11 +147,13 @@ main ( int argc, char **argv )
 	test_st ();
 	printf ( "\n" );
 
-	test_sun1 ();
-	printf ( "\n" );
+	// test_sun1 ();
+	// printf ( "\n" );
 	// test_sun2 ();
-	printf ( "\n" );
-	test_sun3 ();
+	// printf ( "\n" );
+
+	test_sun3a ();
+	test_sun3b ();
 
 	// printf ( "Done\n" );
 }
@@ -339,7 +345,8 @@ sun_alt ( struct time *now, double hour, int verbose )
 	//sinalt = site_info.sin_lat * sin(dec*DEGRAD) + site_info.cos_lat * cos(dec*DEGRAD)*cos(ha*HRRAD);
 	// alt = asin ( sinalt ) * RADDEG;
 
-	if ( verbose && fabs(alt) < 1.0 )
+	// if ( verbose && fabs(alt) < 1.0 )
+	if ( verbose  )
 	    printf ( "Hour: %10.4f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
 
 	return alt;
@@ -400,7 +407,7 @@ sun_events ( struct time *now, double horizon,
 	    yb = sun_alt ( now, hour, 0 ) - horizon;
 	    yc = sun_alt ( now, hour + 1.0, 0 ) - horizon;
 	    nr = quad ( ya, yb, yc, &xe, &ye, &r1, &r2 );
-	    printf ( "abc = %.3f %.3f %.3f  %d\n", ya, yb, yc, nr );
+	    // printf ( "abc = %.3f %.3f %.3f  %d\n", ya, yb, yc, nr );
 	    if ( nr == 1 ) {
 		if ( ya < 0.0 ) {
 		    *lt_rise = hour + r1;
@@ -453,6 +460,7 @@ test_sun_one ( struct time *now, double hour, int verbose )
 	    (void) sun_alt ( now, hour, verbose );
 }
 
+/* Generate table of sun altitudes by hour */
 void
 test_sun1 ( void )
 {
@@ -467,6 +475,7 @@ test_sun1 ( void )
 	}
 }
 
+/* Generate table of sun altitudes by minute */
 void
 test_sun2 ( void )
 {
@@ -474,7 +483,6 @@ test_sun2 ( void )
 	struct time now;
 	double del = 1.0 / (24.0 * 60.0 );
 
-	// set_time ( &now, 2017, 10, 5 );
 	set_time ( &now, 2017, 10, 4 );
 
 	for ( hour = 0.0; hour < 24.0; hour += del ) {
@@ -482,28 +490,115 @@ test_sun2 ( void )
 	}
 }
 
+/* Here the aim is to get a correct sunrise/sunset time for a specific date
+ */
+
+#define SUN3A_YEAR	2017
+#define SUN3A_MONTH	10
+#define SUN3A_DAY	4
+
+/* From NOAO website - 
+ * https://www.esrl.noaa.gov/gmd/grad/solcalc/sunrise.html
+ * using 32:15:46 and 11:02:55
+ * The following are times in hours.
+ * Note that:
+ *	1 minute = .01667 hours
+ *	1 second = .00027778 hours
+ */
+#define SUN3A_RISE	6.333	/* 6:20 */
+#define SUN3A_SET	18.0833	/* 6:05 */
+
+#define SUN3_DEL	0.02	/* a bit over 1 minute */
+
 void
-test_sun3 ( void )
+test_sun3a ( void )
 {
 	struct time now;
-	double lt_rise, lt_set;
+	double rise_hour;
+	double set_hour;
 	int rises, sets, above;
 	double horizon;
 	char buf[32];
 
-	// set_time ( &now, 2017, 10, 5 );
-	set_time ( &now, 2017, 10, 4 );
+	init_site ( &site_info, &site_castellon );
+	set_time ( &now, SUN3A_YEAR, SUN3A_MONTH, SUN3A_DAY );
 
 	horizon = SUN_HORIZON;
 
-	sun_events ( &now, horizon, &lt_rise, &lt_set, &rises, &sets, &above );
+	sun_events ( &now, horizon, &rise_hour, &set_hour, &rises, &sets, &above );
+
+/*
+ *  I get:
+ *	Sun rise 6.339 6:20:21.237
+ *	Sun  set 18.077 18:4:38.193
+ */
+
 	printf ( "\n" );
-	printf ( "Sun rise %.3f %s\n", lt_rise, s_dms(buf,lt_rise) );
-	printf ( "Sun  set %.3f %s\n", lt_set, s_dms(buf,lt_set) );
+	printf ( "Location: %s\n", site_info.name );
+	printf ( "Day: %d-%d-%d\n", SUN3A_MONTH, SUN3A_DAY, SUN3A_YEAR );
+
+	if ( fabs(rise_hour-SUN3A_RISE) < SUN3_DEL )
+	    printf ( "Sun rise %.3f %s OK\n", rise_hour, s_dms(buf,rise_hour) );
+	else
+	    printf ( "Sun rise %.3f %s --- ERR\n", rise_hour, s_dms(buf,rise_hour) );
+
+	if ( fabs(set_hour-SUN3A_SET) < SUN3_DEL )
+	    printf ( "Sun set %.3f %s OK\n", set_hour, s_dms(buf,set_hour) );
+	else
+	    printf ( "Sun set %.3f %s --- ERR\n", set_hour, s_dms(buf,set_hour) );
 
 	// double mjd;
 	// mjd = 2458031.47420 - MJD_OFFSET;
 	// WikiSun ( mjd, &xx );
+}
+
+#define SUN3B_YEAR	2017
+#define SUN3B_MONTH	12
+#define SUN3B_DAY	1
+
+/* These are from the Fortran code MMT almanac program */
+#define SUN3B_RISE	7.11667	/* 7:07 */
+#define SUN3B_SET	17.3333	/* 17:20 */
+
+void
+test_sun3b ( void )
+{
+	struct time now;
+	double rise_hour;
+	double set_hour;
+	int rises, sets, above;
+	double horizon;
+	char buf[32];
+
+	init_site ( &site_info, &site_mmt );
+	set_time ( &now, SUN3B_YEAR, SUN3B_MONTH, SUN3B_DAY );
+
+	horizon = SUN_HORIZON;
+
+	sun_events ( &now, horizon, &rise_hour, &set_hour, &rises, &sets, &above );
+
+	printf ( "\n" );
+	printf ( "Location: %s\n", site_info.name );
+	printf ( "Day: %d-%d-%d\n", SUN3B_MONTH, SUN3B_DAY, SUN3B_YEAR );
+
+	if ( fabs(rise_hour-SUN3B_RISE) < SUN3_DEL )
+	    printf ( "Sun rise %.3f %s OK\n", rise_hour, s_dms(buf,rise_hour) );
+	else
+	    printf ( "Sun rise %.3f %s --- ERR\n", rise_hour, s_dms(buf,rise_hour) );
+
+	if ( fabs(set_hour-SUN3B_SET) < SUN3_DEL )
+	    printf ( "Sun set %.3f %s OK\n", set_hour, s_dms(buf,set_hour) );
+	else
+	    printf ( "Sun set %.3f %s --- ERR\n", set_hour, s_dms(buf,set_hour) );
+
+	// double mjd;
+	// mjd = 2458031.47420 - MJD_OFFSET;
+	// WikiSun ( mjd, &xx );
+}
+
+void
+test_sun4 ( void )
+{
 }
 
 /* ------------------------------------------------------------------------ */
@@ -592,6 +687,7 @@ init_site ( struct site *sp, struct site_data *dp )
 
 	sp->sin_lat = sin(sp->latitude);
 	sp->cos_lat = cos(sp->latitude);
+	strcpy ( sp->name, dp->name );
 }
 
 /* Sidereal time at Greenwich
@@ -776,6 +872,7 @@ calc_mjd ( struct time *tp )
 /* Obliquity of the ecliptic
  * t = julian centuries from 2000 January  1 (12h)
  * (Julian century is always 36525 days)
+ /* XXX - should use this instead of static values below.
  */
 double
 calc_eps ( double jd )
@@ -956,7 +1053,7 @@ set_time ( struct time *tp, int y, int m, int d )
 	tp->day = d;
 	tp->mjd0 = calc_mjd ( tp );
 	tp->jd0 = tp->mjd0 + MJD_OFFSET;
-	printf ( "Set time, JD = %.5f\n", tp->jd0 );
+	// printf ( "Set time, JD = %.5f\n", tp->jd0 );
 }
 
 /* THE END */
