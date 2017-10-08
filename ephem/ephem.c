@@ -2,7 +2,14 @@
 #include <math.h>
 #include <string.h>
 
-/* (c) Tom Trebisky  10-4-2017
+/* ephem.c
+ * Ephemeris and Almanac calculations.
+ *
+ * (c) Tom Trebisky  10-4-2017
+ */
+
+/* TODO
+ * -- Anewm calculation for any year.
  */
 
 /* Note that the international convention for longitude is positive to the east,
@@ -113,8 +120,10 @@ struct site {
 
 void init_site ( struct site *, struct site_data * );
 void set_time ( struct time *, int, int, int );
+double calc_mjd ( struct time * );
 double apc_st ( double );
 char * s_dms ( char *, double );
+char * s_dms_b ( char *, double );
 double hms ( int, int, double );
 double mmt_st ( double );
 double mmt_lst ( double );
@@ -156,6 +165,7 @@ main ( int argc, char **argv )
 	test_sun3a ();
 	test_sun3b ();
 
+	printf ( "\n" );
 	test_almanac ();
 
 	// printf ( "Done\n" );
@@ -173,10 +183,10 @@ struct ephem_data {
 	double moon_set;
 	double moon_age;
 	double civil_rise;
-	double nautl_rise;
-	double astrol_rise;
+	double naut_rise;
+	double astro_rise;
 	double civil_set;
-	double nautl_set;
+	double naut_set;
 	double astro_set;
 };
 
@@ -478,7 +488,6 @@ sun_events ( struct time *now, double horizon,
 #define NAUT_HORIZON	-12.0
 #define ASTRO_HORIZON	-18.0
 
-
 static void
 test_sun_one ( struct time *now, double hour, int verbose )
 {
@@ -631,6 +640,9 @@ rise_set ( struct time *now, double h, double *rh, double *sh )
 
 int days_in_month[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
+char *month_name[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+			"Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
 /*
  * We have leap years because a tropical year
  *  is actually 365.242190 days in length.
@@ -654,16 +666,36 @@ set_leap ( int year )
 	    days_in_month[1] = 28;
 }
 
+/* Iterate through all the days in a year.
+ */
 int
-next_day ( struct time *np )
+next_day ( struct time *tp )
 {
-	if ( np->day >= days_in_month[np->month-1] ) {
-	    if ( np->month == 12 )
+	if ( tp->day >= days_in_month[tp->month-1] ) {
+	    if ( tp->month == 12 )
 		return 0;
-	    ++np->month;
-	    np->day = 1;
+	    ++tp->month;
+	    tp->day = 1;
+	    tp->mjd0 = calc_mjd ( tp );
+	    tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	    return 1;
 	}
-	++np->day;
+	++tp->day;
+	tp->mjd0 = calc_mjd ( tp );
+	tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	return 1;
+}
+
+/* Iterate through all the days in a month.
+ */
+int
+next_day_m ( struct time *tp )
+{
+	if ( tp->day >= days_in_month[tp->month-1] )
+	    return 0;
+	++tp->day;
+	tp->mjd0 = calc_mjd ( tp );
+	tp->jd0 = tp->mjd0 + MJD_OFFSET;
 	return 1;
 }
 
@@ -675,18 +707,34 @@ void
 test_almanac ( void )
 {
 	struct time now;
-	// char buf[32];
 	struct ephem_data *ep;
+	double ut;
+	char buf[32];
 	int s;
 
 	init_site ( &site_info, &site_mmt );
-	set_time ( &now, EPHEM_YEAR, 1, 1 );
+
+	// set_time ( &now, EPHEM_YEAR, 1, 1 );
+	set_time ( &now, EPHEM_YEAR, 12, 1 );
 
 	ep = ephem_info;
 	for ( ;; ) {
-	    // rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
-	    printf ( "M D = %2d %2d\n", now.month, now.day );
-	    s = next_day ( &now );
+	    /* We want lst for night after, not night before,
+	     *  so start with 24.0
+	     */
+	    ut = 24.0 - site_info.tz;
+	    ep->st_midnight = mmt_lst ( now.mjd0 + MJD_OFFSET + ut / 24.0 );
+	    rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
+	    // rise_set ( &now, MOON_HORIZON, &ep->moon_rise, &ep->moon_set );
+	    rise_set ( &now, CIVIL_HORIZON, &ep->civil_rise, &ep->civil_set );
+	    rise_set ( &now, NAUT_HORIZON, &ep->naut_rise, &ep->naut_set );
+	    rise_set ( &now, ASTRO_HORIZON, &ep->astro_rise, &ep->astro_set );
+
+	    // printf ( "%s %2d  %.5f\n", month_name[now.month-1], now.day, ep->st_midnight );
+	    printf ( "%s %2d  %s\n", month_name[now.month-1], now.day, s_dms_b(buf,ep->st_midnight) );
+
+	    // s = next_day ( &now );
+	    s = next_day_m ( &now );
 	    if ( s == 0 )
 		break;
 	    ep++;
@@ -729,10 +777,11 @@ hms ( int h, int m, double s )
  * (also works fine for h:m:s)
  */
 char *
-s_dms ( char *buf, double deg )
+s_dms_delim ( char *buf, double deg, char delim )
 {
 	int d, m;
 	int neg = 0;
+	int s;
 
 	if ( deg < 0.0 ) {
 	    neg = 1;
@@ -746,10 +795,18 @@ s_dms ( char *buf, double deg )
 	deg -= m;
 	deg *= 60.0;
 
-	if ( neg )
-	    sprintf ( buf, "-%d:%d:%.3f", d, m, deg );
-	else
-	    sprintf ( buf, "%d:%d:%.3f", d, m, deg );
+	s = deg + 0.5;
+
+
+	if ( neg ) {
+	    // sprintf ( buf, "-%d%c%02d%c%.3f", d, delim, m, delim, deg );
+	    // sprintf ( buf, "-%d%c%02d%c%02d %.3f", d, delim, m, delim, s, deg );
+	    sprintf ( buf, "-%d%c%02d%c%02d", d, delim, m, delim, s );
+	} else {
+	    // sprintf ( buf, "%d%c%02d%c%.3f", d, delim, m, delim, deg );
+	    // sprintf ( buf, "%d%c%02d%c%02d %.3f", d, delim, m, delim, s, deg );
+	    sprintf ( buf, "%d%c%02d%c%02d", d, delim, m, delim, s );
+	}
 	return buf;
 
 	/*
@@ -757,6 +814,18 @@ s_dms ( char *buf, double deg )
 	printf ( "M = %d\n", m );
 	printf ( "S = %.3f\n", deg );
 	*/
+}
+
+char *
+s_dms ( char *buf, double deg )
+{
+	return s_dms_delim ( buf, deg, ':' );
+}
+
+char *
+s_dms_b ( char *buf, double deg )
+{
+	return s_dms_delim ( buf, deg, ' ' );
 }
 
 void
