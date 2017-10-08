@@ -1,4 +1,5 @@
 ephem
+ephem.out
 *.o
 z
 zz

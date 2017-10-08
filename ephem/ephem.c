@@ -5,10 +5,21 @@
  */
 
 /* Note that the international convention for longitude is positive to the east,
- * so all these longitude coordinates in Arizona ought to be negative.
- * Maybe the timezones should be negative too.
- * XXX XXX
+ * so all of the longitude coordinates in Arizona ought to be negative.
+ * We maintain the same convention for timezones (so it is -7 hours in Arizona).
  */
+
+struct site_data {
+	double lat_deg;
+	double long_deg;
+	double elevation;
+	double tz;
+};
+
+struct site_data site_mmt = { 31.68877778, -110.88456, 2606.0, -7.0 };
+struct site_data site_castellon = { 32.2627640, -111.0485611, 736.092, -7.0 };
+struct site_data site_tucson = { 32.195, -110.892, 700.0, -7.0 };
+
 /* These are for the MMT (Mt. Hopkins) */
 #define LATITUDE        31.68877778     /* site latitude in degrees */
 #define LONGITUDE       7.392303704     /* site longitude in hours west */
@@ -62,6 +73,16 @@
 #define JULIAN_CENTURY	36525.0		/* Days in a Julian century */
 #define MJD_2000	51544.5		/* MJD for J2000 epoch */
 
+/*
+ * The 2003 Almanac page K5 says that
+ *  1900 January 0 at 0h is JD = 2415019.5
+ * Note that JD is zero at noon, whereas
+ *  MJD is zero at midnight.
+ * These are standard conventions.
+ */
+#define MJD_OFFSET	2400000.5
+#define JD_1900		2415020.0
+
 /* Arc seconds in a full circle.
  * i.e. 360*60*60
  */
@@ -72,6 +93,7 @@ struct time {
 	int month;
 	int day;
 	double mjd0;
+	double jd0;
 };
 
 struct site {
@@ -86,7 +108,7 @@ struct site {
 	double cos_lat;
 };
 
-void init_site ( struct site * );
+void init_site ( struct site *, struct site_data * );
 void set_time ( struct time *, int, int, int );
 double apc_st ( double );
 char * s_dms ( char *, double );
@@ -94,13 +116,15 @@ double hms ( int, int, double );
 double mmt_st ( double );
 double mmt_lst ( double );
 
-void MiniSun ( double, double *, double * );
+void MiniSun ( double, double *, double *, int );
 void MiniMoon ( double, double *, double * );
+void WikiSun ( double, double * );
 
 void test_jd ( void );
 void test_st ( void );
 void test_sun1 ( void );
 void test_sun2 ( void );
+void test_sun3 ( void );
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -110,15 +134,20 @@ struct site site_info;
 int
 main ( int argc, char **argv )
 {
-	init_site ( &site_info );
+	// init_site ( &site_info, &site_mmt );
+	// init_site ( &site_info, &site_castellon );
+	init_site ( &site_info, &site_tucson );
 
-	// test_jd ();
-	// printf ( "\n" );
-	// test_st ();
+	test_jd ();
+	printf ( "\n" );
+	test_st ();
+	printf ( "\n" );
 
 	test_sun1 ();
 	printf ( "\n" );
-	test_sun2 ();
+	// test_sun2 ();
+	printf ( "\n" );
+	test_sun3 ();
 
 	// printf ( "Done\n" );
 }
@@ -127,19 +156,10 @@ main ( int argc, char **argv )
  * I have a bunch of JD values from the Astronomical Almanac
  *  pages B12 or B13 (depending on the year).
  *
- * Note that JD is zero at noon, whereas
- *  MJD is zero at midnight.
- * These are standard conventions.
- *
  * The ancient fortran MMT almanac program used its own
  *  flavor of MJD (but calling it JD) which was referenced to
- *  the JD_1900 date, the 2003 Almanac page K5 says that
- *  1900 January 0 at 0h is JD = 2415019.5
- *  I add the 0.5 to reckon JD from noon as usual.
-
+ *  the JD_1900 date.
  */
-#define MJD_OFFSET	2400000.5
-#define JD_1900		2415020.0
 
 static void
 test_jd_one ( int year, double aa_jd )
@@ -222,6 +242,54 @@ test_st ( void )
 	test_st_one ( 2018, 6, 42, 23.1082 );
 }
 
+/* Here is the routine in use at the MMT for converting
+ * from HA and Dec to Alt/Az
+ * All arguments and results in radians.
+ */
+void
+toaltaz (double ha, double dec, double *alt, double *az)
+{
+        double sinh, cosh, sinz, cosz;
+        double sindec, cosdec, sinha, cosha;
+
+        sindec = sin (dec);
+        cosdec = cos (dec);
+        sinha = sin (ha);
+        cosha = cos (ha);
+
+        // sinh = site_info.sinlat * sindec + site_info.coslat * cosdec * cosha;
+        sinh = site_info.sin_lat * sindec + site_info.cos_lat * cosdec * cosha;
+
+        *alt = asin (sinh);
+        cosh = cos (*alt);
+
+        if (fabs(cosh) > 0.0017) {
+            sinz = -cosdec * sinha / cosh;
+            // cosz = (sindec - site_info.sinlat * sinh) / site_info.coslat /cosh;
+            cosz = (sindec - site_info.sin_lat * sinh) / site_info.cos_lat /cosh;
+            *az = atan2 (sinz, cosz);
+        } else
+            *az = PI;
+
+        if (*az < 0.0)
+            *az += TWOPI;
+}
+
+/* This takes ha in hours, dec in degrees.
+ * yields alt/az in degrees, 0.0
+ */
+void
+hd_to_aa ( double ha, double dec, double *alt, double *az )
+{
+	double sinalt;
+
+	sinalt = site_info.sin_lat * sin(dec*DEGRAD) + site_info.cos_lat * cos(dec*DEGRAD) * cos(ha*HRRAD);
+	*alt = asin ( sinalt ) * RADDEG;
+	*az = 0.0;	/* XXX */
+}
+
+
+/* Returns the suns elevation above the horizon in degrees */
 static double
 sun_alt ( struct time *now, double hour, int verbose )
 {
@@ -233,7 +301,7 @@ sun_alt ( struct time *now, double hour, int verbose )
 	double t;
 	double ra, dec;
 	double sinalt;
-	double alt;
+	double alt, az;
 
 	// printf ( " MJD = %.2f\n", now->mjd );
 	/*
@@ -247,27 +315,32 @@ sun_alt ( struct time *now, double hour, int verbose )
 	 *  LST = 16:54:38.779
 	 */
 
-	mjd = now->mjd0 + (hour + site_info.long_hours) / 24.0;
+	/* The hour argument is a local time, but we want UT to
+	 * add to mjd0 to get mjd, so adjust by the time zone
+	 */
+	mjd = now->mjd0 + (hour - site_info.tz) / 24.0;
 	jd = mjd + MJD_OFFSET;
 	// jd = 2458031.47420;
-	lst =  mmt_st ( jd ) - site_info.long_hours;
+	// lst =  mmt_st ( jd ) - site_info.long_hours;
+	lst =  mmt_st ( jd ) + site_info.long_hours;
 	if ( lst < 0.0 ) lst += 24.0;
 	if ( lst > 24.0 ) lst -= 24.0;
 	// printf ( "Hour: %6.2f, JD = %.2f, LST = %s\n", hour, jd, s_dms(buf,lst) );
 	/* OK to here XXX XXX */
 
-	t = ( mjd - MJD_2000 ) / JULIAN_CENTURY;
-	// printf ( "mjd = %.2f, T = %.7f\n", mjd, t );
-	MiniSun ( t, &ra, &dec );
+	MiniSun ( mjd, &ra, &dec, verbose );
 
-	/* Convert to alt, az */
 	ha = lst - ra;
 	// printf ( "Hour: %6.2f, JD = %.2f, LST = %s HA = %.2f\n", hour, jd, s_dms(buf,lst), ha );
 
-	sinalt = site_info.sin_lat * sin(dec*DEGRAD) + site_info.cos_lat * cos(dec*DEGRAD)*cos(ha*HRRAD);
-	alt = asin ( sinalt ) * RADDEG;
-	if ( verbose )
-	    printf ( "Hour: %6.2f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
+	/* Convert to alt, az */
+	hd_to_aa ( ha, dec, &alt, &az );
+
+	//sinalt = site_info.sin_lat * sin(dec*DEGRAD) + site_info.cos_lat * cos(dec*DEGRAD)*cos(ha*HRRAD);
+	// alt = asin ( sinalt ) * RADDEG;
+
+	if ( verbose && fabs(alt) < 1.0 )
+	    printf ( "Hour: %10.4f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
 
 	return alt;
 }
@@ -304,7 +377,7 @@ quad ( double ya, double yb, double yc, double *xe, double *ye, double *r1, doub
 /* Find the sunrise and sunset times for a given day.
  */
 static void
-sun_events ( struct time *now,
+sun_events ( struct time *now, double horizon,
 	double *lt_rise, double *lt_set,
 	int *arises, int *asets, int *aabove )
 {
@@ -319,13 +392,13 @@ sun_events ( struct time *now,
 	above = 0;
 	hour = 1.0;
 
-	ya = sun_alt ( now, hour - 1.0, 0 );
+	ya = sun_alt ( now, hour - 1.0, 0 ) - horizon;
 	if ( ya > 0.0 )
 	    above = 1;
 
 	do {
-	    yb = sun_alt ( now, hour, 0 );
-	    yc = sun_alt ( now, hour + 1.0, 0 );
+	    yb = sun_alt ( now, hour, 0 ) - horizon;
+	    yc = sun_alt ( now, hour + 1.0, 0 ) - horizon;
 	    nr = quad ( ya, yb, yc, &xe, &ye, &r1, &r2 );
 	    printf ( "abc = %.3f %.3f %.3f  %d\n", ya, yb, yc, nr );
 	    if ( nr == 1 ) {
@@ -358,10 +431,26 @@ sun_events ( struct time *now,
 	*aabove = above;
 }
 
+/* Horizon target values in degrees.
+ * We call it sunrise (for example) when the calculated geocentric
+ *  altitude of the sun matches this target value.
+ * The Sun and Moon values are the angular half size
+ *  corrected for parallax and refraction.
+ * Note that the approximately 1 degree offset for the sun
+ *  yields a time of 24*60/360 = approximately 4 minutes of time.
+ */
+#define SUN_HORIZON	(-50.0/60.0)
+#define MOON_HORIZON	(8.0/60.0)
+
+#define CIVIL_HORIZON	-6.0
+#define NAUT_HORIZON	-12.0
+#define ASTRO_HORIZON	-18.0
+
+
 static void
-test_sun_one ( struct time *now, double hour )
+test_sun_one ( struct time *now, double hour, int verbose )
 {
-	    (void) sun_alt ( now, hour, 1 );
+	    (void) sun_alt ( now, hour, verbose );
 }
 
 void
@@ -374,22 +463,47 @@ test_sun1 ( void )
 	set_time ( &now, 2017, 10, 4 );
 
 	for ( hour = 0.0; hour < 23.5; hour += 1.0 ) {
-	    test_sun_one ( &now, hour );
+	    test_sun_one ( &now, hour, 1 );
 	}
 }
 
 void
 test_sun2 ( void )
 {
+	double hour;
 	struct time now;
-	double lt_rise, lt_set;
-	int rises, sets, above;
+	double del = 1.0 / (24.0 * 60.0 );
 
 	// set_time ( &now, 2017, 10, 5 );
 	set_time ( &now, 2017, 10, 4 );
 
-	sun_events ( &now, &lt_rise, &lt_set, &rises, &sets, &above );
-	printf ( "Sun rise and set: %.3f %.3f\n", lt_rise, lt_set );
+	for ( hour = 0.0; hour < 24.0; hour += del ) {
+	    test_sun_one ( &now, hour, 1 );
+	}
+}
+
+void
+test_sun3 ( void )
+{
+	struct time now;
+	double lt_rise, lt_set;
+	int rises, sets, above;
+	double horizon;
+	char buf[32];
+
+	// set_time ( &now, 2017, 10, 5 );
+	set_time ( &now, 2017, 10, 4 );
+
+	horizon = SUN_HORIZON;
+
+	sun_events ( &now, horizon, &lt_rise, &lt_set, &rises, &sets, &above );
+	printf ( "\n" );
+	printf ( "Sun rise %.3f %s\n", lt_rise, s_dms(buf,lt_rise) );
+	printf ( "Sun  set %.3f %s\n", lt_set, s_dms(buf,lt_set) );
+
+	// double mjd;
+	// mjd = 2458031.47420 - MJD_OFFSET;
+	// WikiSun ( mjd, &xx );
 }
 
 /* ------------------------------------------------------------------------ */
@@ -431,6 +545,12 @@ char *
 s_dms ( char *buf, double deg )
 {
 	int d, m;
+	int neg = 0;
+
+	if ( deg < 0.0 ) {
+	    neg = 1;
+	    deg = -deg;
+	}
 
 	d = floor ( deg );
 	deg -= d;
@@ -439,7 +559,10 @@ s_dms ( char *buf, double deg )
 	deg -= m;
 	deg *= 60.0;
 
-	sprintf ( buf, "%d:%d:%.3f", d, m, deg );
+	if ( neg )
+	    sprintf ( buf, "-%d:%d:%.3f", d, m, deg );
+	else
+	    sprintf ( buf, "%d:%d:%.3f", d, m, deg );
 	return buf;
 
 	/*
@@ -450,16 +573,22 @@ s_dms ( char *buf, double deg )
 }
 
 void
-init_site ( struct site *sp )
+init_site ( struct site *sp, struct site_data *dp )
 {
-	sp->lat_deg = LATITUDE;		/* degrees N */
+	sp->lat_deg = dp->lat_deg;
+	sp->long_deg = dp->long_deg;
+	sp->long_hours = sp->long_deg * 24.0 / 360.0;
+
+#ifdef notdef
 	sp->long_hours = LONGITUDE;	/* hours west */
 	sp->long_deg = sp->long_hours * -360.0 / 24.0;	/* degrees E */
+#endif
 
 	sp->latitude = sp->lat_deg * DEGRAD;
 	sp->longitude = sp->long_deg * DEGRAD;
-	sp->elevation = ELEVATION;      /* site elevation in kilometers (never used) */
-	sp->tz = TIMEZONE;		/* hours from greenwich */
+
+	sp->elevation = dp->elevation;	/* site elevation, now in meters (never used) */
+	sp->tz = dp->tz;		/* hours from greenwich, also never used */
 
 	sp->sin_lat = sin(sp->latitude);
 	sp->cos_lat = cos(sp->latitude);
@@ -583,6 +712,7 @@ mmt_st ( double jd )
 	/* The following in units of hours */
         // last = gmst - site_info.geodetic_long_h + e;
         // last = gmst - site_info.long_hours + e;
+        // last = gmst + site_info.long_hours + e;
         // lst = gmst + e;
 
         gmst -= 2.9e-4 * sin (omega);
@@ -599,7 +729,9 @@ mmt_lst ( double jd )
 {
 	double lst;
 
-	lst =  mmt_st ( jd ) - site_info.long_hours;
+	// lst =  mmt_st ( jd ) - site_info.long_hours;
+	lst =  mmt_st ( jd ) + site_info.long_hours;
+
         if (lst < 0.0)
             lst += 24.0;
         if (lst > 24.0)
@@ -661,6 +793,7 @@ calc_eps ( double jd )
 /* Transform from ecliptic
  *  to equatorial (ra, dec) coordinates.
  * Starts with lat and long in radians.
+ *
  * Yields ra in hours, dec in degrees.
  */
 void
@@ -684,6 +817,7 @@ ll_to_rd ( double ll_lat, double ll_long, double *ra, double *dec )
 	y = coseps * v - sineps * w;
 	z = sineps * v + coseps * w;
 	rho = sqrt ( 1.0 - z*z );
+
 	*dec = RADDEG * atan ( z / rho );
 	*ra = 2.0 * RADHR * atan ( y / (x + rho) );
 	if ( *ra < 0.0 ) *ra += 24.0;
@@ -730,27 +864,43 @@ MiniMoon ( double t, double *ra, double *dec )
 	ll_to_rd ( b_moon, l_moon, ra, dec );
 }
 
+#ifdef notdef
+#define MJD_OFFSET	2400000.5
+#define MJD_2000	51544.5		/* MJD for J2000 epoch */
+#define JULIAN_CENTURY	36525.0		/* Days in a Julian century */
+#endif
+
+/* Equations from Wikipedia article */
 void
-checksun ( void )
+WikiSun ( double mjd, double *rv )
 {
-	double jd;
+	// double jd;
 	double n, l, g, g2, ll;
 
-	jd = 2458031.47420;
-	n = jd - 2451545.0;
+	// jd = 2458031.47420;
+	// n = jd - 2451545.0;
+	// printf ( "W: %.2f %.2f\n", jd, n );
+	// mjd = jd - MJD_OFFSET;
+
+	n = mjd - MJD_2000;
+	// printf ( "W: %.2f %.2f\n", mjd, n );
+
 	l = 280.460 + 0.9856474 * n;	/* mean long - degrees */
 	g = 357.528 + 0.9856003 * n;	/* anomaly - degrees */
 
+	// These are big values (nominal 6000.0 or so) */
 	// printf ( "Check, l, g = %.2f %.2f\n", l, g );
 	l = fmod ( l, 360.0 );
 	g = fmod ( g, 360.0 );
-	printf ( "Check, l, g = %.2f %.2f\n", l, g );
+	// printf ( "Check, l, g = %.2f %.2f\n", l, g );
 
 	g2 = g + g;
 	g2 = fmod ( g2, 360.0 );
 
 	ll = l + 1.915 * sin(g*DEGRAD) + 0.020 * sin(g2*DEGRAD);
-	printf ( "Check, solar long (deg) = %.3f\n", ll );
+	// printf ( "Check, solar long (deg) = %.3f\n", ll );
+
+	*rv = ll;
 }
 
 /* From APC, page 39
@@ -761,22 +911,41 @@ checksun ( void )
  * (it never exceeds 0.00033 degrees).
  *
  * t = time in julian centuries since J2000
+ * Returns:
+ *  RA in hours
+ *  Dec in degrees
  */
 void
-MiniSun ( double t, double *ra, double *dec )
+MiniSun ( double mjd, double *ra, double *dec, int verbose )
 {
 	double m;
+	double t;
 	double sun_long;
+	// double w_long;
+	char buf[32];
 
+	t = ( mjd - MJD_2000 ) / JULIAN_CENTURY;
+	// printf ( "mjd = %.2f, T = %.7f\n", mjd, t );
+
+	/* This gives the suns ecliptic longitude in radians */
 	m = TWOPI * Frac ( 0.993133 + 99.997361 * t );
 	sun_long = TWOPI * Frac ( 0.7859453 + m / TWOPI +
 	    (6893.0 * sin(m) + 72.0 * sin(2.0*m) + 6191.2 * t ) / ARCSEC_360 );
 
-	// printf ( "MiniSun, solar long = %.3f\n", sun_long * RADDEG );
+	if ( verbose > 1 ) {
+	    printf ( "Sun, solar long (Mini) = %s\n", s_dms(buf,sun_long * RADDEG) );
+	}
 
-	// checksun ();
+	// WikiSun ( mjd, &w_long );
+	// printf ( "Sun, solar long (Mini) = %.4f long (Wiki) = %.4f\n", sun_long * RADDEG, w_long );
+	// ll_to_rd ( 0.0, w_long * DEGRAD, ra, dec );
 
 	ll_to_rd ( 0.0, sun_long, ra, dec );
+
+	if ( verbose > 1 ) {
+	    printf ( "Sun, RA  (Mini) = %.4f %s\n", *ra, s_dms(buf,*ra) );
+	    printf ( "Sun, Dec (Mini) = %.4f %s\n", *dec, s_dms(buf,*dec) );
+	}
 }
 
 void
@@ -786,6 +955,8 @@ set_time ( struct time *tp, int y, int m, int d )
 	tp->month = m;
 	tp->day = d;
 	tp->mjd0 = calc_mjd ( tp );
+	tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	printf ( "Set time, JD = %.5f\n", tp->jd0 );
 }
 
 /* THE END */
