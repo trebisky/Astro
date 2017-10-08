@@ -129,6 +129,7 @@ void test_sun1 ( void );
 void test_sun2 ( void );
 void test_sun3a ( void );
 void test_sun3b ( void );
+void test_almanac ( void );
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -155,12 +156,36 @@ main ( int argc, char **argv )
 	test_sun3a ();
 	test_sun3b ();
 
+	test_almanac ();
+
 	// printf ( "Done\n" );
 }
+
+#define MAX_DAYS	366
+
+struct ephem_data {
+	int month;
+	int day;
+	double st_midnight;
+	double sun_rise;
+	double sun_set;
+	double moon_rise;
+	double moon_set;
+	double moon_age;
+	double civil_rise;
+	double nautl_rise;
+	double astrol_rise;
+	double civil_set;
+	double nautl_set;
+	double astro_set;
+};
+
+struct ephem_data ephem_info[MAX_DAYS];
 
 /* Let's test our mjd routine.
  * I have a bunch of JD values from the Astronomical Almanac
  *  pages B12 or B13 (depending on the year).
+ * These values are for January 0
  *
  * The ancient fortran MMT almanac program used its own
  *  flavor of MJD (but calling it JD) which was referenced to
@@ -596,9 +621,76 @@ test_sun3b ( void )
 	// WikiSun ( mjd, &xx );
 }
 
-void
-test_sun4 ( void )
+static void
+rise_set ( struct time *now, double h, double *rh, double *sh )
 {
+	int rises, sets, above;
+
+	sun_events ( now, h, rh, sh, &rises, &sets, &above );
+}
+
+int days_in_month[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
+/*
+ * We have leap years because a tropical year
+ *  is actually 365.242190 days in length.
+ */
+int
+is_leap ( int year )
+{
+	if ( (year % 4) != 0 ) 
+	    return 0;
+	if ( (year % 100) == 0 && (year % 400) != 0 )
+	    return 0;
+	return 1;
+}
+
+void
+set_leap ( int year )
+{
+	if ( is_leap ( year ) )
+	    days_in_month[1] = 29;
+	else
+	    days_in_month[1] = 28;
+}
+
+int
+next_day ( struct time *np )
+{
+	if ( np->day >= days_in_month[np->month-1] ) {
+	    if ( np->month == 12 )
+		return 0;
+	    ++np->month;
+	    np->day = 1;
+	}
+	++np->day;
+	return 1;
+}
+
+#define EPHEM_YEAR	2017
+
+/* This actually grinds out the almanac for the year.
+ */
+void
+test_almanac ( void )
+{
+	struct time now;
+	// char buf[32];
+	struct ephem_data *ep;
+	int s;
+
+	init_site ( &site_info, &site_mmt );
+	set_time ( &now, EPHEM_YEAR, 1, 1 );
+
+	ep = ephem_info;
+	for ( ;; ) {
+	    // rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
+	    printf ( "M D = %2d %2d\n", now.month, now.day );
+	    s = next_day ( &now );
+	    if ( s == 0 )
+		break;
+	    ep++;
+	}
 }
 
 /* ------------------------------------------------------------------------ */
@@ -839,6 +931,8 @@ mmt_lst ( double jd )
 /* Calculate the MJD for a given year, month, and day
  *  For years after 1582, we are using the Gregorian calendar,
  *  so for my purposes we could eliminate the test below.
+ * This expects month as 1 .. 12
+ * This expects day as 1 ... N
  */
 double 
 calc_mjd ( struct time *tp )
@@ -872,7 +966,7 @@ calc_mjd ( struct time *tp )
 /* Obliquity of the ecliptic
  * t = julian centuries from 2000 January  1 (12h)
  * (Julian century is always 36525 days)
- /* XXX - should use this instead of static values below.
+ * XXX - should use this instead of static values below.
  */
 double
 calc_eps ( double jd )
@@ -1054,6 +1148,7 @@ set_time ( struct time *tp, int y, int m, int d )
 	tp->mjd0 = calc_mjd ( tp );
 	tp->jd0 = tp->mjd0 + MJD_OFFSET;
 	// printf ( "Set time, JD = %.5f\n", tp->jd0 );
+	set_leap ( y );
 }
 
 /* THE END */
