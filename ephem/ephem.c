@@ -9,6 +9,8 @@
  */
 
 /* TODO
+ * -- split into multiple files
+ * -- rename time to "day" structure
  * -- Anewm calculation for any year.
  */
 
@@ -97,17 +99,6 @@ struct site_data site_tucson = { 32.195, -110.892, 700.0, -7.0, "tucson" };
  */
 #define ARCSEC_360	1296000.0
 
-struct time {
-	int year;
-	int month;
-	int day;
-	int prior_year;
-	int prior_month;
-	int prior_day;
-	double mjd0;
-	double jd0;
-};
-
 struct site {
 	double lat_deg;
 	double long_deg;
@@ -121,9 +112,20 @@ struct site {
 	char name[64];
 };
 
+struct day {
+	int *dpm;
+	int days_in_month;
+	int year;
+	int month;
+	int day;
+	double mjd0;
+	double jd0;
+};
+
+
 void init_site ( struct site *, struct site_data * );
-void set_time ( struct time *, int, int, int );
-double calc_mjd ( struct time * );
+void set_day ( struct day *, int, int, int );
+double calc_mjd ( struct day * );
 double apc_st ( double );
 
 char * s_dms ( char *, double );
@@ -152,6 +154,113 @@ void test_anew ( void );
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
+
+
+/* Days per month */
+int dpm_normal[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+int dpm_leap[] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
+char *month_name[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+			"Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+/*
+ * We have leap years because a tropical year
+ *  is actually 365.242190 days in length.
+ */
+int
+is_leap ( int year )
+{
+	if ( (year % 4) != 0 ) 
+	    return 0;
+	if ( (year % 100) == 0 && (year % 400) != 0 )
+	    return 0;
+	return 1;
+}
+
+void
+set_day ( struct day *tp, int y, int m, int d )
+{
+	tp->year = y;
+	if ( is_leap ( y ) )
+	    tp->dpm = dpm_leap;
+	else
+	    tp->dpm = dpm_normal;
+	tp->month = m;
+	tp->days_in_month = tp->dpm[tp->month-1];
+	tp->day = d;
+	tp->mjd0 = calc_mjd ( tp );
+	tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	// printf ( "Set time, JD = %.5f\n", tp->jd0 );
+}
+
+/* Iterate through all the days in a year.
+ * returns 0 at end of year.
+ */
+int
+next_day ( struct day *tp )
+{
+	if ( tp->day >= tp->days_in_month ) {
+	    if ( tp->month == 12 )
+		return 0;
+	    ++tp->month;
+	    tp->days_in_month = tp->dpm[tp->month-1];
+	    tp->day = 1;
+	    tp->mjd0 = calc_mjd ( tp );
+	    tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	    return 1;
+	}
+	++tp->day;
+	tp->mjd0 = calc_mjd ( tp );
+	tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	return 1;
+}
+
+void
+prior_day ( struct day *cur, struct day *prior )
+{
+	// structure copy !
+	*prior = *cur;
+
+	if ( prior->day == 1 ) {
+	    if ( prior->month == 1 ) {
+		--prior->year;
+		if ( is_leap ( prior->year ) )
+		    prior->dpm = dpm_leap;
+		else
+		    prior->dpm = dpm_normal;
+		prior->month = 12;
+		prior->days_in_month = prior->dpm[prior->month-1];
+		prior->day = prior->days_in_month;
+	    } else {
+		--prior->month;
+		prior->days_in_month = prior->dpm[prior->month-1];
+		prior->day = prior->days_in_month;
+	    }
+	} else
+	    --prior->day;
+
+	prior->mjd0 = calc_mjd ( prior );
+	prior->jd0 = prior->mjd0 + MJD_OFFSET;
+	return;
+}
+
+/* Iterate through all the days in a month.
+ * returns 0 at end of month.
+ */
+int
+next_day_m ( struct day *tp )
+{
+	if ( tp->day >= tp->days_in_month )
+	    return 0;
+	++tp->day;
+
+	tp->mjd0 = calc_mjd ( tp );
+	tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	return 1;
+}
+
+/* ---------------------------------------------------------- */
+
 
 struct site site_info;
 
@@ -218,10 +327,10 @@ struct ephem_data ephem_info[MAX_DAYS];
 static void
 test_jd_one ( int year, double aa_jd )
 {
-	struct time now;
+	struct day now;
 	double err;
 
-	set_time ( &now, year, 1, 0 );
+	set_day ( &now, year, 1, 0 );
 
 	err = aa_jd - (now.mjd0 + MJD_OFFSET);
 	if ( fabs(err) < 0.0001 )
@@ -258,7 +367,7 @@ test_jd ( void )
 static void
 test_st_one ( int year, int h, int m, double s )
 {
-	struct time now;
+	struct day now;
 	double st_apc;
 	double st_aa;
 	double st_mmt;
@@ -267,7 +376,7 @@ test_st_one ( int year, int h, int m, double s )
 
 	st_aa = hms ( h, m, s );
 
-	set_time ( &now, year, 1, 1 );
+	set_day ( &now, year, 1, 1 );
 	st_apc = apc_st ( now.mjd0 ) * RADHR;
 	st_mmt = mmt_st ( now.mjd0 + MJD_OFFSET );
 
@@ -345,7 +454,7 @@ hd_to_aa ( double ha, double dec, double *alt, double *az )
 
 /* Returns the suns elevation above the horizon in degrees */
 static double
-sun_alt ( struct time *now, double hour, int verbose )
+sun_alt ( struct day *now, double hour, int verbose )
 {
 	double jd;
 	double lst;
@@ -432,7 +541,7 @@ quad ( double ya, double yb, double yc, double *xe, double *ye, double *r1, doub
 /* Find the sunrise and sunset times for a given day.
  */
 static void
-sun_events ( struct time *now, double horizon,
+sun_events ( struct day *now, double horizon,
 	double *lt_rise, double *lt_set,
 	int *arises, int *asets, int *aabove )
 {
@@ -502,7 +611,7 @@ sun_events ( struct time *now, double horizon,
 #define ASTRO_HORIZON	-18.0
 
 static void
-test_sun_one ( struct time *now, double hour, int verbose )
+test_sun_one ( struct day *now, double hour, int verbose )
 {
 	    (void) sun_alt ( now, hour, verbose );
 }
@@ -512,10 +621,10 @@ void
 test_sun1 ( void )
 {
 	double hour;
-	struct time now;
+	struct day now;
 
-	// set_time ( &now, 2017, 10, 5 );
-	set_time ( &now, 2017, 10, 4 );
+	// set_day ( &now, 2017, 10, 5 );
+	set_day ( &now, 2017, 10, 4 );
 
 	for ( hour = 0.0; hour < 23.5; hour += 1.0 ) {
 	    test_sun_one ( &now, hour, 1 );
@@ -527,10 +636,10 @@ void
 test_sun2 ( void )
 {
 	double hour;
-	struct time now;
+	struct day now;
 	double del = 1.0 / (24.0 * 60.0 );
 
-	set_time ( &now, 2017, 10, 4 );
+	set_day ( &now, 2017, 10, 4 );
 
 	for ( hour = 0.0; hour < 24.0; hour += del ) {
 	    test_sun_one ( &now, hour, 1 );
@@ -560,7 +669,7 @@ test_sun2 ( void )
 void
 test_sun3a ( void )
 {
-	struct time now;
+	struct day now;
 	double rise_hour;
 	double set_hour;
 	int rises, sets, above;
@@ -568,7 +677,7 @@ test_sun3a ( void )
 	char buf[32];
 
 	init_site ( &site_info, &site_castellon );
-	set_time ( &now, SUN3A_YEAR, SUN3A_MONTH, SUN3A_DAY );
+	set_day ( &now, SUN3A_YEAR, SUN3A_MONTH, SUN3A_DAY );
 
 	horizon = SUN_HORIZON;
 
@@ -610,7 +719,7 @@ test_sun3a ( void )
 void
 test_sun3b ( void )
 {
-	struct time now;
+	struct day now;
 	double rise_hour;
 	double set_hour;
 	int rises, sets, above;
@@ -618,7 +727,7 @@ test_sun3b ( void )
 	char buf[32];
 
 	init_site ( &site_info, &site_mmt );
-	set_time ( &now, SUN3B_YEAR, SUN3B_MONTH, SUN3B_DAY );
+	set_day ( &now, SUN3B_YEAR, SUN3B_MONTH, SUN3B_DAY );
 
 	horizon = SUN_HORIZON;
 
@@ -644,78 +753,11 @@ test_sun3b ( void )
 }
 
 static void
-rise_set ( struct time *now, double h, double *rh, double *sh )
+rise_set ( struct day *now, double h, double *rh, double *sh )
 {
 	int rises, sets, above;
 
 	sun_events ( now, h, rh, sh, &rises, &sets, &above );
-}
-
-int days_in_month[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-
-char *month_name[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-			"Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-
-/*
- * We have leap years because a tropical year
- *  is actually 365.242190 days in length.
- */
-int
-is_leap ( int year )
-{
-	if ( (year % 4) != 0 ) 
-	    return 0;
-	if ( (year % 100) == 0 && (year % 400) != 0 )
-	    return 0;
-	return 1;
-}
-
-void
-set_leap ( int year )
-{
-	if ( is_leap ( year ) )
-	    days_in_month[1] = 29;
-	else
-	    days_in_month[1] = 28;
-}
-
-/* Iterate through all the days in a year.
- */
-int
-next_day ( struct time *tp )
-{
-	tp->prior_day = tp->day;
-	tp->prior_month = tp->month;
-
-	if ( tp->day >= days_in_month[tp->month-1] ) {
-	    if ( tp->month == 12 )
-		return 0;
-	    ++tp->month;
-	    tp->day = 1;
-	    tp->mjd0 = calc_mjd ( tp );
-	    tp->jd0 = tp->mjd0 + MJD_OFFSET;
-	    return 1;
-	}
-	++tp->day;
-	tp->mjd0 = calc_mjd ( tp );
-	tp->jd0 = tp->mjd0 + MJD_OFFSET;
-	return 1;
-}
-
-/* Iterate through all the days in a month.
- */
-int
-next_day_m ( struct time *tp )
-{
-	tp->prior_day = tp->day;
-	tp->prior_month = tp->month;
-
-	if ( tp->day >= days_in_month[tp->month-1] )
-	    return 0;
-	++tp->day;
-	tp->mjd0 = calc_mjd ( tp );
-	tp->jd0 = tp->mjd0 + MJD_OFFSET;
-	return 1;
 }
 
 #define EPHEM_YEAR	2017
@@ -726,7 +768,7 @@ next_day_m ( struct time *tp )
 void
 test_almanac ( void )
 {
-	struct time now;
+	struct day now;
 	struct ephem_data *ep;
 	double ut;
 	char buf[32];
@@ -734,8 +776,8 @@ test_almanac ( void )
 
 	init_site ( &site_info, &site_mmt );
 
-	// set_time ( &now, EPHEM_YEAR, 1, 1 );
-	set_time ( &now, EPHEM_YEAR, 12, 1 );
+	// set_day ( &now, EPHEM_YEAR, 1, 1 );
+	set_day ( &now, EPHEM_YEAR, 12, 1 );
 
 	ep = ephem_info;
 	for ( ;; ) {
@@ -798,14 +840,14 @@ test_almanac ( void )
 void
 xx_solar ( void )
 {
-	struct time now;
+	struct day now;
 	double s_lat, s_long;
 	int y;
 
 	init_site ( &site_info, &site_mmt );
 
 	for ( y=2000; y<2020; y++ ) {
-	    set_time ( &now, y, 1, 1 );
+	    set_day ( &now, y, 1, 1 );
 	    MiniSun_ll ( now.mjd0, &s_lat, &s_long, 0 );
 	    printf ( "Sun long (%d) = %.5f\n", y, s_long * RADDEG );
 	}
@@ -830,7 +872,9 @@ xx_solar ( void )
 void
 test_anew ( void )
 {
-	struct time now;
+	struct day now;
+	struct day prior;
+	struct day prior2;
 	double s_lat, s_long;
 	double m_lat, m_long;
 	double dif;
@@ -844,7 +888,7 @@ test_anew ( void )
 
 	init_site ( &site_info, &site_mmt );
 
-	set_time ( &now, ANEW_YEAR, 1, 1 );
+	set_day ( &now, ANEW_YEAR, 1, 1 );
 
 	printf ( "ANEW search for %d -- %s\n", ANEW_YEAR, ANEW_STR );
 	for ( ;; ) {
@@ -863,9 +907,15 @@ test_anew ( void )
 	    printf ( "  %s (%10.4f)", s_dms(buf,m_long * RADDEG), m_long * RADDEG );
 	    printf ( "  %10.4f", dif * RADDEG );
 	    if ( ! first && dif > 0.0 && last_dif < 0.0 ) {
-		f = -last_dif / (dif - last_dif) * 24.0 + site_info.tz;
 		printf ( " ***\n" );
-		printf ( " %s %2d -- New moon: %s\n", month_name[now.prior_month-1], now.prior_day, s_dms(buf,f) );
+		prior_day ( &now, &prior );
+		f = -last_dif / (dif - last_dif) * 24.0 + site_info.tz;
+		if ( f < 0.0 ) {
+		    prior_day ( &prior, &prior2 );
+		    f += 24.0;
+		    printf ( " %s %2d -- New moon: %s\n", month_name[prior2.month-1], prior2.day, s_dms(buf,f) );
+		} else
+		    printf ( " %s %2d -- New moon: %s\n", month_name[prior.month-1], prior.day, s_dms(buf,f) );
 		++count;
 	    } else
 		printf ( "\n" );
@@ -1183,7 +1233,7 @@ mmt_lst ( double jd )
  * This expects day as 1 ... N
  */
 double 
-calc_mjd ( struct time *tp )
+calc_mjd ( struct day *tp )
 {
 	int m;
 	int y;
@@ -1413,17 +1463,4 @@ MiniSun ( double mjd, double *ra, double *dec, int verbose )
 	    printf ( "Sun, Dec (Mini) = %.4f %s\n", *dec, s_dms(buf,*dec) );
 	}
 }
-
-void
-set_time ( struct time *tp, int y, int m, int d )
-{
-	tp->year = y;
-	tp->month = m;
-	tp->day = d;
-	tp->mjd0 = calc_mjd ( tp );
-	tp->jd0 = tp->mjd0 + MJD_OFFSET;
-	// printf ( "Set time, JD = %.5f\n", tp->jd0 );
-	set_leap ( y );
-}
-
 /* THE END */
