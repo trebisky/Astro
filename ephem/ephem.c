@@ -12,7 +12,8 @@
  * -- split into multiple files
  * -- rename time to "day" structure
  * -- add mjd to date and time routine
- * -- Anewm calculation for any year.
+ * -- add command line options to drive this thing
+ * -- Anewm calculation for any year
  */
 
 /* Note that the international convention for longitude is positive to the east,
@@ -884,14 +885,15 @@ test_anew ( void )
 	char buf[32];
 	int first = 1;
 	int count = 0;
+	int year = ANEW_YEAR;
 
 	// xx_solar ();
 
 	init_site ( &site_info, &site_mmt );
 
-	set_day ( &now, ANEW_YEAR, 1, 1 );
+	set_day ( &now, year, 1, 1 );
 
-	printf ( "ANEW search for %d -- %s\n", ANEW_YEAR, ANEW_STR );
+	// printf ( "ANEW search for %d -- %s\n", ANEW_YEAR, ANEW_STR );
 	for ( ;; ) {
 	    MiniSun_ll ( now.mjd0, &s_lat, &s_long, 0 );
 	    MiniMoon_ll ( now.mjd0, &m_lat, &m_long );
@@ -903,23 +905,26 @@ test_anew ( void )
 		dif += TWOPI;
 		
 	    // printf ( "%s %2d  %.5f", month_name[now.month-1], now.day, ep->st_midnight );
+	    /*
 	    printf ( "%s %2d", month_name[now.month-1], now.day );
 	    printf ( "  %s (%10.4f)", s_dms(buf,s_long * RADDEG), s_long * RADDEG );
 	    printf ( "  %s (%10.4f)", s_dms(buf,m_long * RADDEG), m_long * RADDEG );
 	    printf ( "  %10.4f", dif * RADDEG );
+	    */
 	    if ( ! first && dif > 0.0 && last_dif < 0.0 ) {
-		printf ( " ***\n" );
+		// printf ( " ***\n" );
 		prior_day ( &now, &prior );
 		f = -last_dif / (dif - last_dif) * 24.0 + site_info.tz;
 		if ( f < 0.0 ) {
 		    prior_day ( &prior, &prior2 );
 		    f += 24.0;
-		    printf ( " %s %2d -- New moon: %s\n", month_name[prior2.month-1], prior2.day, s_dms(buf,f) );
+		    printf ( "%d %s %2d -- New moon: %s\n", year, month_name[prior2.month-1], prior2.day, s_dms(buf,f) );
 		} else
-		    printf ( " %s %2d -- New moon: %s\n", month_name[prior.month-1], prior.day, s_dms(buf,f) );
+		    printf ( "%d %s %2d -- New moon: %s\n", year, month_name[prior.month-1], prior.day, s_dms(buf,f) );
 		++count;
-	    } else
-		printf ( "\n" );
+	    } else {
+		// printf ( "\n" );
+	    }
 
 	    first = 0;
 	    last_dif = dif;
