@@ -5,12 +5,13 @@
 /* ephem.c
  * Ephemeris and Almanac calculations.
  *
- * (c) Tom Trebisky  10-4-2017
+ * (c) Tom Trebisky  10-4-2017 10-13-2017
  */
 
 /* TODO
  * -- split into multiple files
  * -- rename time to "day" structure
+ * -- add mjd to date and time routine
  * -- Anewm calculation for any year.
  */
 
