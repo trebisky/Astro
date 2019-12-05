@@ -1,26 +1,27 @@
+From Alan Koski  10-12-2017
+
 As far as I know, most calendars for the US use
 Eastern Standard Time for Astronomical events,
 unless they say differently.
 
-Here is the output for the year 2017 from my
-lunation program:
+Here is the output for the year 2017 from my lunation program:
 
 			    Time of Moon phases (MST)
-Lunation    New Moon        First Quarter        Full Moon         Last Quarter
-1163    2016Dec28 23:53    2017Jan05 12:47    2017Jan12  4:34    2017Jan19 15:14
-1164    2017Jan27 17:07    2017Feb03 21:19    2017Feb10 17:33    2017Feb18 12:33
-1165    2017Feb26  7:58    2017Mar05  4:32    2017Mar12  7:54    2017Mar20  8:58
-1166    2017Mar27 19:57    2017Apr03 11:39    2017Apr10 23:08    2017Apr19  2:57
-1167    2017Apr26  5:16    2017May02 19:47    2017May10 14:43    2017May18 17:33
-1168    2017May25 12:44    2017Jun01  5:42    2017Jun09  6:10    2017Jun17  4:33
-1169    2017Jun23 19:31    2017Jun30 17:51    2017Jul08 21:07    2017Jul16 12:26
-1170    2017Jul23  2:46    2017Jul30  8:23    2017Aug07 11:11    2017Aug14 18:15
-1171    2017Aug21 11:30    2017Aug29  1:13    2017Sep06  0:03    2017Sep12 23:25
-1172    2017Sep19 22:30    2017Sep27 19:54    2017Oct05 11:40    2017Oct12  5:25
-1173    2017Oct19 12:12    2017Oct27 15:22    2017Nov03 22:23    2017Nov10 13:37
-1174    2017Nov18  4:42    2017Nov26 10:03    2017Dec03  8:47    2017Dec10  0:51
-1175    2017Dec17 23:31    2017Dec26  2:20    2018Jan01 19:24    2018Jan08 15:25
+Lunation    New Moon          First Quarter       Full Moon           Last Quarter
+1163    2016 Dec28 23:53    2017 Jan05 12:47    2017 Jan12  4:34    2017 Jan19 15:14
+1164    2017 Jan27 17:07    2017 Feb03 21:19    2017 Feb10 17:33    2017 Feb18 12:33
+1165    2017 Feb26  7:58    2017 Mar05  4:32    2017 Mar12  7:54    2017 Mar20  8:58
+1166    2017 Mar27 19:57    2017 Apr03 11:39    2017 Apr10 23:08    2017 Apr19  2:57
+1167    2017 Apr26  5:16    2017 May02 19:47    2017 May10 14:43    2017 May18 17:33
+1168    2017 May25 12:44    2017 Jun01  5:42    2017 Jun09  6:10    2017 Jun17  4:33
+1169    2017 Jun23 19:31    2017 Jun30 17:51    2017 Jul08 21:07    2017 Jul16 12:26
+1170    2017 Jul23  2:46    2017 Jul30  8:23    2017 Aug07 11:11    2017 Aug14 18:15
+1171    2017 Aug21 11:30    2017 Aug29  1:13    2017 Sep06  0:03    2017 Sep12 23:25
+1172    2017 Sep19 22:30    2017 Sep27 19:54    2017 Oct05 11:40    2017 Oct12  5:25
+1173    2017 Oct19 12:12    2017 Oct27 15:22    2017 Nov03 22:23    2017 Nov10 13:37
+1174    2017 Nov18  4:42    2017 Nov26 10:03    2017 Dec03  8:47    2017 Dec10  0:51
+1175    2017 Dec17 23:31    2017 Dec26  2:20    2018 Jan01 19:24    2018 Jan08 15:25
 
 I calculate these using Meeus Chapter 49.  I use MST for output.
 
-Alan
+(looks like Chapter 17 to me -- tjt)

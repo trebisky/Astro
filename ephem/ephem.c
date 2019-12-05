@@ -29,9 +29,11 @@ struct site_data {
 	char *name;
 };
 
+/* elevation in meters */
 struct site_data site_mmt = { 31.68877778, -110.88456, 2606.0, -7.0, "mmt" };
 struct site_data site_castellon = { 32.2627640, -111.0485611, 736.092, -7.0, "castellon" };
 struct site_data site_tucson = { 32.195, -110.892, 700.0, -7.0, "tucson" };
+struct site_data site_greenwich = { 51.4826, 0.0077, 46.0, 0.0, "greenwich" };
 
 /* These are for the MMT (Mt. Hopkins) */
 #define LATITUDE        31.68877778     /* site latitude in degrees */
@@ -138,12 +140,14 @@ double hms ( int, int, double );
 double mmt_st ( double );
 double mmt_lst ( double );
 
-void MiniSun_ll ( double, double *, double *, int );
-void MiniSun ( double, double *, double *, int );
-void WikiSun ( double, double * );
+void sun_apc_ll ( double, double *, double *, int );
+void sun_apc ( double, double *, double *, int );
 
-void MiniMoon_ll ( double, double *, double * );
-void MiniMoon ( double, double *, double * );
+void sun_wiki ( double, double * );
+
+void moon_apc_ll ( double, double *, double * );
+// void MiniMoon_ll ( double, double *, double * );
+// void MiniMoon ( double, double *, double * );
 
 void test_jd ( void );
 void test_st ( void );
@@ -153,6 +157,8 @@ void test_sun3a ( void );
 void test_sun3b ( void );
 void test_almanac ( void );
 void test_anew ( void );
+void anew_table ( void );
+void show_old_newm ( void );
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -291,6 +297,12 @@ main ( int argc, char **argv )
 
 	printf ( "\n" );
 	test_anew ();
+
+	printf ( "\n" );
+	show_old_newm ();
+
+	printf ( "\n" );
+	anew_table ();
 
 	// printf ( "Done\n" );
 }
@@ -493,7 +505,7 @@ sun_alt ( struct day *now, double hour, int verbose )
 	// printf ( "Hour: %6.2f, JD = %.2f, LST = %s\n", hour, jd, s_dms(buf,lst) );
 	/* OK to here XXX XXX */
 
-	MiniSun ( mjd, &ra, &dec, verbose );
+	sun_apc ( mjd, &ra, &dec, verbose );
 
 	ha = lst - ra;
 	// printf ( "Hour: %6.2f, JD = %.2f, LST = %s HA = %.2f\n", hour, jd, s_dms(buf,lst), ha );
@@ -707,7 +719,7 @@ test_sun3a ( void )
 
 	// double mjd;
 	// mjd = 2458031.47420 - MJD_OFFSET;
-	// WikiSun ( mjd, &xx );
+	// sun_wiki ( mjd, &xx );
 }
 
 #define SUN3B_YEAR	2017
@@ -751,7 +763,7 @@ test_sun3b ( void )
 
 	// double mjd;
 	// mjd = 2458031.47420 - MJD_OFFSET;
-	// WikiSun ( mjd, &xx );
+	// sun_wiki ( mjd, &xx );
 }
 
 static void
@@ -835,6 +847,36 @@ test_almanac ( void )
 # (2018) newmoon = dhm( 17.0, 2.0, 17.0 ) - dhm( 1.0, timezone, 0.0 )
 #endif
 
+static void
+show_old_one ( int y, double d, double h, double m )
+{
+	double val;
+	
+	h += m / 60.0;
+	h -= 7.0;
+
+	val = d - 1.0;
+	val += h/24.0;
+
+	printf ( "ANEWM: %d  %10.4f\n", y, val );
+}
+
+void
+show_old_newm ( void )
+{
+	show_old_one ( 2008, 8.0, 11.0, 37.0 );
+	show_old_one ( 2009, 26.0, 7.0, 55.0 );
+	show_old_one ( 2010, 15.0, 7.0, 11.0 );
+	show_old_one ( 2011, 4.0, 9.0, 3.0 );
+	show_old_one ( 2012, 23.0, 7.0, 39.0 );
+	show_old_one ( 2013, 11.0, 19.0, 44.0 );
+	show_old_one ( 2014, 1.0, 11.0, 14.0 );
+	show_old_one ( 2015, 20.0, 13.0, 14.0 );
+	show_old_one ( 2016, 10.0, 1.0, 31.0 );
+	show_old_one ( 2017, 28.0, 0.0, 7.0 );
+	show_old_one ( 2018, 17.0, 2.0, 17.0 );
+}
+
 #ifdef notdef
 /* This demonstrates that the solar longitude is 280 degrees on
  * January 1 of every year, within about +-1 degree
@@ -850,7 +892,7 @@ xx_solar ( void )
 
 	for ( y=2000; y<2020; y++ ) {
 	    set_day ( &now, y, 1, 1 );
-	    MiniSun_ll ( now.mjd0, &s_lat, &s_long, 0 );
+	    sun_apc_ll ( now.mjd0, &s_lat, &s_long, 0 );
 	    printf ( "Sun long (%d) = %.5f\n", y, s_long * RADDEG );
 	}
 }
@@ -858,7 +900,9 @@ xx_solar ( void )
 
 // #define ANEW_YEAR	2012
 // #define ANEW_STR	"23:7:39"
-#define ANEW_YEAR	2017
+// #define ANEW_YEAR	2017
+// #define ANEW_STR	"28:0:7"
+#define ANEW_YEAR	2019
 #define ANEW_STR	"28:0:7"
 
 /* The solar longitude increases about 1 degree per day.
@@ -889,14 +933,15 @@ test_anew ( void )
 
 	// xx_solar ();
 
-	init_site ( &site_info, &site_mmt );
+	// init_site ( &site_info, &site_mmt );
+	init_site ( &site_info, &site_greenwich );
 
 	set_day ( &now, year, 1, 1 );
 
 	// printf ( "ANEW search for %d -- %s\n", ANEW_YEAR, ANEW_STR );
 	for ( ;; ) {
-	    MiniSun_ll ( now.mjd0, &s_lat, &s_long, 0 );
-	    MiniMoon_ll ( now.mjd0, &m_lat, &m_long );
+	    sun_apc_ll ( now.mjd0, &s_lat, &s_long, 0 );
+	    moon_apc_ll ( now.mjd0, &m_lat, &m_long );
 
 	    dif = m_long - s_long;
 	    if ( dif > PI )
@@ -935,6 +980,81 @@ test_anew ( void )
 	}
 
 	printf ( "%d lunations\n", count );
+}
+
+/* Copied and pruned from the above */
+void
+calc_anew ( int year )
+{
+	struct day now;
+	struct day prior;
+	struct day prior2;
+	double s_lat, s_long;
+	double m_lat, m_long;
+	double dif;
+	double last_dif;
+	double f;
+	char buf[32];
+	int first = 1;
+	int aday;
+	int amon;
+	double anew;
+
+	init_site ( &site_info, &site_mmt );
+
+	set_day ( &now, year, 1, 1 );
+
+	for ( ;; ) {
+	    sun_apc_ll ( now.mjd0, &s_lat, &s_long, 0 );
+	    moon_apc_ll ( now.mjd0, &m_lat, &m_long );
+
+	    dif = m_long - s_long;
+	    if ( dif > PI )
+		dif -= TWOPI;
+	    if ( dif < -PI )
+		dif += TWOPI;
+		
+	    if ( ! first && dif > 0.0 && last_dif < 0.0 ) {
+		prior_day ( &now, &prior );
+		f = -last_dif / (dif - last_dif) * 24.0 + site_info.tz;
+		if ( f < 0.0 ) {
+		    prior_day ( &prior, &prior2 );
+		    f += 24.0;
+		    aday = prior2.day;
+		    amon = prior2.month-1;
+
+		    // anew = prior2.day - 1.0 + f / 24.0;
+		    // printf ( "%d %s %2d -- New moon1: %8s %8.4f\n", year, month_name[prior2.month-1], prior2.day, s_dms(buf,f), anew );
+		} else {
+		    aday = prior.day;
+		    amon = prior.month-1;
+
+		    // anew = prior.day - 1.0 + f / 24.0;
+		    // printf ( "%d %s %2d -- New moon2: %8s %8.4f\n", year, month_name[prior.month-1], prior.day, s_dms(buf,f), anew );
+		}
+		anew = (aday - 1) + f / 24.0;
+		printf ( "%d %s %2d -- New moon: %8s %8.4f\n", year, month_name[amon], aday, s_dms(buf,f), anew );
+		return;
+	    }
+
+	    first = 0;
+	    last_dif = dif;
+
+	    if ( ! next_day ( &now ) )
+		break;
+	}
+
+	printf ( "BIG trouble in %d\n", year );
+}
+
+void
+anew_table ( void )
+{
+	int year;
+
+	for ( year = 2000; year < 2100; year++ ) {
+	    calc_anew ( year );
+	}
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1322,10 +1442,12 @@ ll_to_rd ( double ll_lat, double ll_long, double *ra, double *dec )
 /* From APC, page 38
  * This is a reduced version to calculate lunar position
  *  suitable for moonrise and moonset times
+ * From the APC "MiniMoon" routine.
  *
  */
 void
-MiniMoon_ll ( double mjd, double *latp, double *longp )
+// MiniMoon_ll ( double mjd, double *latp, double *longp )
+moon_apc_ll ( double mjd, double *latp, double *longp )
 {
 	double l0, lm, ls, d, f;
 	double dl, s, h, n;
@@ -1365,24 +1487,20 @@ MiniMoon_ll ( double mjd, double *latp, double *longp )
 	*latp = ( 18520.0 * sin(s) + n ) * ASEC_TO_RAD;
 }
 
+#ifdef notdef
 void
 MiniMoon ( double mjd, double *ra, double *dec )
 {
 	double m_lat, m_long;
 
-	MiniMoon_ll ( mjd, &m_lat, &m_long );
+	moon_apc_ll ( mjd, &m_lat, &m_long );
 	ll_to_rd ( m_lat, m_long, ra, dec );
 }
-
-#ifdef notdef
-#define MJD_OFFSET	2400000.5
-#define MJD_2000	51544.5		/* MJD for J2000 epoch */
-#define JULIAN_CENTURY	36525.0		/* Days in a Julian century */
 #endif
 
 /* Equations from Wikipedia article */
 void
-WikiSun ( double mjd, double *rv )
+sun_wiki ( double mjd, double *rv )
 {
 	// double jd;
 	double n, l, g, g2, ll;
@@ -1404,8 +1522,7 @@ WikiSun ( double mjd, double *rv )
 	g = fmod ( g, 360.0 );
 	// printf ( "Check, l, g = %.2f %.2f\n", l, g );
 
-	g2 = g + g;
-	g2 = fmod ( g2, 360.0 );
+	g2 = fmod ( g+g, 360.0 );
 
 	ll = l + 1.915 * sin(g*DEGRAD) + 0.020 * sin(g2*DEGRAD);
 	// printf ( "Check, solar long (deg) = %.3f\n", ll );
@@ -1413,9 +1530,9 @@ WikiSun ( double mjd, double *rv )
 	*rv = ll;
 }
 
-/* From APC, page 39
+/* From APC, page 39  "MiniSun"
  * This is a reduced version to calculate solar positions
- *  suitable for sunrise and sunset times.
+ *  adequate for sunrise and sunset times.
  * Note that the sun always is in the ecliptic plane, so the
  *  solar ecliptic latitude is always zero.
  * (it never exceeds 0.00033 degrees).
@@ -1426,7 +1543,7 @@ WikiSun ( double mjd, double *rv )
  *  Dec in degrees
  */
 void
-MiniSun_ll ( double mjd, double *latp, double *longp, int verbose )
+sun_apc_ll ( double mjd, double *latp, double *longp, int verbose )
 {
 	double t;
 	double m;
@@ -1450,15 +1567,15 @@ MiniSun_ll ( double mjd, double *latp, double *longp, int verbose )
 }
 
 void
-MiniSun ( double mjd, double *ra, double *dec, int verbose )
+sun_apc ( double mjd, double *ra, double *dec, int verbose )
 {
 	double s_lat, s_long;
 	// double w_long;
 	char buf[32];
 
-	MiniSun_ll ( mjd, &s_lat, &s_long, verbose );
+	sun_apc_ll ( mjd, &s_lat, &s_long, verbose );
 
-	// WikiSun ( mjd, &w_long );
+	// sun_wiki ( mjd, &w_long );
 	// printf ( "Sun, solar long (Mini) = %.4f long (Wiki) = %.4f\n", sun_long * RADDEG, w_long );
 	// ll_to_rd ( 0.0, w_long * DEGRAD, ra, dec );
 
