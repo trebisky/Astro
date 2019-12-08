@@ -126,6 +126,7 @@ struct day {
 	double jd0;
 };
 
+struct site site_info;
 
 void init_site ( struct site *, struct site_data * );
 void set_day ( struct day *, int, int, int );
@@ -134,6 +135,7 @@ double apc_st ( double );
 
 char * s_dms ( char *, double );
 char * s_dms_b ( char *, double );
+char * s_dm ( char *, double );
 char * s_dm_b ( char *, double );
 
 double hms ( int, int, double );
@@ -146,6 +148,7 @@ void sun_apc ( double, double *, double *, int );
 void sun_wiki ( double, double * );
 
 void moon_apc_ll ( double, double *, double * );
+void moon_apc ( double, double *, double * );
 // void MiniMoon_ll ( double, double *, double * );
 // void MiniMoon ( double, double *, double * );
 
@@ -170,6 +173,9 @@ int dpm_leap[] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
 char *month_name[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
 			"Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+char *month_name_full[] = { "January", "February", "March", "April", "May", "June",
+			"July", "August", "September", "October", "November", "December" };
 
 /*
  * We have leap years because a tropical year
@@ -269,43 +275,6 @@ next_day_m ( struct day *tp )
 
 /* ---------------------------------------------------------- */
 
-
-struct site site_info;
-
-int
-main ( int argc, char **argv )
-{
-	// init_site ( &site_info, &site_mmt );
-	// init_site ( &site_info, &site_castellon );
-	init_site ( &site_info, &site_tucson );
-
-	test_jd ();
-	printf ( "\n" );
-	test_st ();
-	printf ( "\n" );
-
-	// test_sun1 ();
-	// printf ( "\n" );
-	// test_sun2 ();
-	// printf ( "\n" );
-
-	test_sun3a ();
-	test_sun3b ();
-
-	printf ( "\n" );
-	test_almanac ();
-
-	printf ( "\n" );
-	test_anew ();
-
-	printf ( "\n" );
-	show_old_newm ();
-
-	printf ( "\n" );
-	anew_table ();
-
-	// printf ( "Done\n" );
-}
 
 #define MAX_DAYS	366
 
@@ -523,6 +492,44 @@ sun_alt ( struct day *now, double hour, int verbose )
 	return alt;
 }
 
+/* Returns the elevation of the moon above the horizon in degrees */
+static double
+moon_alt ( struct day *now, double hour, int verbose )
+{
+	double jd;
+	double lst;
+	double ha;
+	char buf[32];
+	double mjd;
+	double t;
+	double ra, dec;
+	double sinalt;
+	double alt, az;
+
+	/* The hour argument is a local time, but we want UT to
+	 * add to mjd0 to get mjd, so adjust by the time zone
+	 */
+	mjd = now->mjd0 + (hour - site_info.tz) / 24.0;
+	jd = mjd + MJD_OFFSET;
+
+	lst =  mmt_st ( jd ) + site_info.long_hours;
+	if ( lst < 0.0 ) lst += 24.0;
+	if ( lst > 24.0 ) lst -= 24.0;
+
+	moon_apc ( mjd, &ra, &dec );
+
+	ha = lst - ra;
+
+	/* Convert to alt, az */
+	hd_to_aa ( ha, dec, &alt, &az );
+
+	if ( verbose  )
+	    printf ( "Hour: %10.4f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
+
+	return alt;
+}
+
+/* Quadratic interpolation - APC pages 48-49 */
 static int
 quad ( double ya, double yb, double yc, double *xe, double *ye, double *r1, double *r2 )
 {
@@ -609,13 +616,99 @@ sun_events ( struct day *now, double horizon,
 	*aabove = above;
 }
 
+/* Find the sunrise and sunset times for a given day.
+ * Same code as above with different xx_alt() routine.
+ * Also, we scan from 12 to 36 hours, to get afternoon and
+ * evening ris/set events.
+ */
+static void
+moon_events ( struct day *now, double horizon,
+	double *lt_rise, double *lt_set,
+	int *arises, int *asets, int *aabove )
+{
+	double ya, yb, yc;
+	double hour;
+	double xe, ye, r1, r2;
+	int nr;
+	int rises, sets, above;
+
+	rises = 0;
+	sets = 0;
+	above = 0;
+
+	hour = 13.0;
+
+	ya = moon_alt ( now, hour - 1.0, 0 ) - horizon;
+	if ( ya > 0.0 )
+	    above = 1;
+
+	do {
+	    yb = moon_alt ( now, hour, 0 ) - horizon;
+	    yc = moon_alt ( now, hour + 1.0, 0 ) - horizon;
+	    nr = quad ( ya, yb, yc, &xe, &ye, &r1, &r2 );
+	    // printf ( "abc = %.3f %.3f %.3f  %d\n", ya, yb, yc, nr );
+	    if ( nr == 1 ) {
+		if ( ya < 0.0 ) {
+		    *lt_rise = hour + r1;
+		    rises = 1;
+		} else {
+		    *lt_set = hour + r1;
+		    sets = 1;
+		}
+	    }
+	    if ( nr == 2 ) {
+		if ( ye < 0.0 ) {
+		    *lt_rise = hour + r2;
+		    *lt_set = hour + r1;
+		} else {
+		    *lt_rise = hour + r1;
+		    *lt_set = hour + r2;
+		}
+		rises = 1;
+		sets = 1;
+	    }
+
+	    ya = yc;
+	    hour += 2.0;
+	} while ( hour < 37.0 && rises + sets < 2 );
+
+	if ( rises ) {
+	    if (*lt_rise > 24.0 )
+		*lt_rise -= 24.0;
+	}
+
+	if ( sets ) {
+	    if (*lt_set > 24.0 )
+		*lt_set -= 24.0;
+	}
+
+	*arises = rises;
+	*asets = sets;
+	*aabove = above;
+}
+
+
 /* Horizon target values in degrees.
  * We call it sunrise (for example) when the calculated geocentric
  *  altitude of the sun matches this target value.
  * The Sun and Moon values are the angular half size
  *  corrected for parallax and refraction.
- * Note that the approximately 1 degree offset for the sun
- *  yields a time of 24*60/360 = approximately 4 minutes of time.
+ * The apparent angular size of the Sun varies (due to the eccentricity
+ *  of the earths orbit from 0.524 to 0.542 degrees.
+ *  A value of 0.53 is often used.
+ *  The value 50/60 is 0.8333 and is the apparent radius (0.265)
+ *  along with a ballpark value for parallax and refraction.
+ *  This is a hoary historical value used by tradition.
+ *
+ * For the purposes of civil, nautical, and astronomical twilight,
+ *  we don't fret over the correction for refraction.
+ *
+ *  The value for the moon is curious.
+ *  The moons apparent diameter is only slightly less than that of the sun
+ *  (roughly 0.5 degrees), so this value of 8/60 positive is another hoary
+ *  traditional value that I have no explanation for thus far.
+ *
+ * Note that the 0.8333 degree offset translates to 3.33 minutes of time.
  */
 #define SUN_HORIZON	(-50.0/60.0)
 #define MOON_HORIZON	(8.0/60.0)
@@ -774,7 +867,19 @@ rise_set ( struct day *now, double h, double *rh, double *sh )
 	sun_events ( now, h, rh, sh, &rises, &sets, &above );
 }
 
-#define EPHEM_YEAR	2017
+static void
+rise_set_moon ( struct day *now, double *rh, double *sh )
+{
+	int rises, sets, above;
+
+	moon_events ( now, MOON_HORIZON, rh, sh, &rises, &sets, &above );
+	// moon_events ( now, SUN_HORIZON, rh, sh, &rises, &sets, &above );
+}
+
+
+/* #define EPHEM_YEAR	2017	*/
+#define EPHEM_YEAR	2019
+#define EPHEM_MONTH	1
 
 /* This actually grinds out the almanac for the year.
  * XXX - we don't really need to put ep in an array.
@@ -790,8 +895,9 @@ test_almanac ( void )
 
 	init_site ( &site_info, &site_mmt );
 
+	printf ( "    %d\n", EPHEM_YEAR );
 	// set_day ( &now, EPHEM_YEAR, 1, 1 );
-	set_day ( &now, EPHEM_YEAR, 12, 1 );
+	set_day ( &now, EPHEM_YEAR, EPHEM_MONTH, 1 );
 
 	ep = ephem_info;
 	for ( ;; ) {
@@ -800,8 +906,9 @@ test_almanac ( void )
 	     */
 	    ut = 24.0 - site_info.tz;
 	    ep->st_midnight = mmt_lst ( now.mjd0 + MJD_OFFSET + ut / 24.0 );
+
 	    rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
-	    // rise_set ( &now, MOON_HORIZON, &ep->moon_rise, &ep->moon_set );
+	    // rise_set_moon ( &now, &ep->moon_rise, &ep->moon_set );
 	    rise_set ( &now, CIVIL_HORIZON, &ep->civil_rise, &ep->civil_set );
 	    rise_set ( &now, NAUT_HORIZON, &ep->naut_rise, &ep->naut_set );
 	    rise_set ( &now, ASTRO_HORIZON, &ep->astro_rise, &ep->astro_set );
@@ -1175,6 +1282,12 @@ s_dms_b ( char *buf, double deg )
 }
 
 char *
+s_dm ( char *buf, double deg )
+{
+	return s_dm_delim ( buf, deg, ':' );
+}
+
+char *
 s_dm_b ( char *buf, double deg )
 {
 	return s_dm_delim ( buf, deg, ' ' );
@@ -1405,7 +1518,7 @@ calc_eps ( double jd )
 	// return 23.5 * DEGRAD;
 }
 
-/* Transform from ecliptic
+/* Transform from ecliptic coordinates
  *  to equatorial (ra, dec) coordinates.
  * Starts with lat and long in radians.
  *
@@ -1487,17 +1600,6 @@ moon_apc_ll ( double mjd, double *latp, double *longp )
 	*latp = ( 18520.0 * sin(s) + n ) * ASEC_TO_RAD;
 }
 
-#ifdef notdef
-void
-MiniMoon ( double mjd, double *ra, double *dec )
-{
-	double m_lat, m_long;
-
-	moon_apc_ll ( mjd, &m_lat, &m_long );
-	ll_to_rd ( m_lat, m_long, ra, dec );
-}
-#endif
-
 /* Equations from Wikipedia article */
 void
 sun_wiki ( double mjd, double *rv )
@@ -1566,6 +1668,8 @@ sun_apc_ll ( double mjd, double *latp, double *longp, int verbose )
 	*longp = sun_long;
 }
 
+/* Solar position in equatorial coordinates (ra/dec)
+ */
 void
 sun_apc ( double mjd, double *ra, double *dec, int verbose )
 {
@@ -1586,4 +1690,96 @@ sun_apc ( double mjd, double *ra, double *dec, int verbose )
 	    printf ( "Sun, Dec (Mini) = %.4f %s\n", *dec, s_dms(buf,*dec) );
 	}
 }
+
+/* "MiniMoon - ra and dec of the moon at a given time.
+ */
+void
+moon_apc ( double mjd, double *ra, double *dec )
+{
+	double m_lat, m_long;
+
+	moon_apc_ll ( mjd, &m_lat, &m_long );
+	ll_to_rd ( m_lat, m_long, ra, dec );
+}
+
+/* ---------------------------------------------------------- */
+
+void
+just_today ( int verbose )
+{
+	struct day now;
+	struct ephem_data *ep;
+	char buf1[32];
+	char buf2[32];
+
+	int year;
+	int month;
+	int day;
+
+	year = 2019;
+	month = 12;
+	day = 7;
+
+	printf ("%s %d %d\n", month_name_full[month-1], day, year );
+
+	init_site ( &site_info, &site_mmt );
+
+	set_day ( &now, year, month, day );
+
+	ep = ephem_info;
+	rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
+	rise_set_moon ( &now, &ep->moon_rise, &ep->moon_set );
+
+	printf ( "Sunrise: %s  (%s)\n", s_dms(buf1,ep->sun_rise), s_dm(buf2,ep->sun_rise) );
+	printf ( "Sunset:  %s  (%s)\n", s_dms(buf1,ep->sun_set), s_dm(buf2,ep->sun_set) );
+
+	printf ( "Moonrise: %s  (%s)\n", s_dms(buf1,ep->moon_rise), s_dm(buf2,ep->moon_rise) );
+	printf ( "Moonset:  %s  (%s)\n", s_dms(buf1,ep->moon_set), s_dm(buf2,ep->moon_set) );
+}
+
+/* ---------------------------------------------------------- */
+
+int
+main ( int argc, char **argv )
+{
+	// init_site ( &site_info, &site_mmt );
+	// init_site ( &site_info, &site_castellon );
+	init_site ( &site_info, &site_tucson );
+
+#ifdef notdef
+	test_jd ();
+	printf ( "\n" );
+	test_st ();
+	printf ( "\n" );
+
+	// test_sun1 ();
+	// printf ( "\n" );
+	// test_sun2 ();
+	// printf ( "\n" );
+
+	test_sun3a ();
+	test_sun3b ();
+#endif
+
+	just_today ( 0 );
+
+#ifdef notdef
+	printf ( "\n" );
+	test_almanac ();
+#endif
+
+#ifdef notdef
+	printf ( "\n" );
+	test_anew ();
+
+	printf ( "\n" );
+	show_old_newm ();
+
+	printf ( "\n" );
+	anew_table ();
+#endif
+
+	// printf ( "Done\n" );
+}
+
 /* THE END */
