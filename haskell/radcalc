@@ -1,0 +1,23 @@
+#!/bin/ruby
+
+$r2d = 180.0 / Math::PI
+
+def showr ( r )
+	puts r * $r2d
+end
+
+showr 1.58534
+showr 1.67552
+showr 1.78024
+showr 1.88496
+showr 1.56861
+
+stmid1 = 6.68873
+
+366.times { |i|
+    dayno = i+1
+    stmid = stmid1 + 0.0657098 * dayno
+    stmid -= 24.0 if stmid > 24.0
+    print dayno, " ", stmid, "\n"
+}
+
