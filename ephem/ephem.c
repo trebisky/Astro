@@ -1089,9 +1089,13 @@ test_anew ( void )
 	printf ( "%d lunations\n", count );
 }
 
-/* Copied and pruned from the above */
-void
-calc_anew ( int year )
+/* Copied and pruned from the above
+ * The idea here is to calculate the time of the first new moon
+ *  for the specified year.
+ * The value returned is in units of days (with 0.x being in January 1)
+ */
+double
+calc_anew ( int year, int verbose )
 {
 	struct day now;
 	struct day prior;
@@ -1140,8 +1144,9 @@ calc_anew ( int year )
 		    // printf ( "%d %s %2d -- New moon2: %8s %8.4f\n", year, month_name[prior.month-1], prior.day, s_dms(buf,f), anew );
 		}
 		anew = (aday - 1) + f / 24.0;
-		printf ( "%d %s %2d -- New moon: %8s %8.4f\n", year, month_name[amon], aday, s_dms(buf,f), anew );
-		return;
+		if ( verbose )
+		    printf ( "%d %s %2d -- New moon: %8s %8.4f\n", year, month_name[amon], aday, s_dms(buf,f), anew );
+		return anew;
 	    }
 
 	    first = 0;
@@ -1152,6 +1157,15 @@ calc_anew ( int year )
 	}
 
 	printf ( "BIG trouble in %d\n", year );
+	return 0.0;
+}
+
+void
+print_anew ( int year )
+{
+	double anew;
+
+	anew = calc_anew ( year, 1 );
 }
 
 void
@@ -1160,8 +1174,18 @@ anew_table ( void )
 	int year;
 
 	for ( year = 2000; year < 2100; year++ ) {
-	    calc_anew ( year );
+	    // calc_anew ( year );
+	    print_anew ( year );
 	}
+}
+
+/* Just a place holder right now.
+ * Moon age is the days since the last new moon.
+ * We get new moons every "synodic month", which is 29.53 days.
+ */
+void
+moon_age ( void )
+{
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1735,6 +1759,8 @@ just_today ( int verbose )
 
 	printf ( "Moonrise: %s  (%s)\n", s_dms(buf1,ep->moon_rise), s_dm(buf2,ep->moon_rise) );
 	printf ( "Moonset:  %s  (%s)\n", s_dms(buf1,ep->moon_set), s_dm(buf2,ep->moon_set) );
+
+	print_anew ( year );
 }
 
 /* ---------------------------------------------------------- */
