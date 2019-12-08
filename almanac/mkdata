@@ -1,0 +1,366 @@
+#!/usr/bin/ruby
+# mkdata
+
+# November  27, 2018 Tom Trebisky
+# September 21, 2017 Tom Trebisky
+# September  2, 2016 Tom Trebisky
+# September 18, 2015 Tom Trebisky
+# September 25, 2014 Tom Trebisky
+# September  6, 2013 Tom Trebisky
+# August     3, 2012 Tom Trebisky
+# September  6, 2011 Tom Trebisky
+# August    23, 2010 Tom Trebisky
+# July      22, 2009 Tom Trebisky
+# September  4, 2008 Tom Trebisky
+# August    20, 2007 Tom Trebisky
+# October   26, 2006 Tom Trebisky
+# October   27, 2005 Tom Trebisky
+# August    20, 2004 Tom Trebisky
+# November   3, 2003 Tom Trebisky
+#
+# Generate data statements for MMT ephemeris program.  
+#
+# The philosophy here is that I just copy values verbatim
+# from the Almanac to this file and let this script
+# do all the averaging, unit conversion, interpolation
+# and whatever, avoiding errors that would occur when doing
+# this by hand with the help of a calculator.
+#
+# When you see an arrow marker like this:
+# ----> 
+# It means that things follow which you must update each year.
+#
+# In general if I am working on say 2010, it is useful to have
+# the astronomical almanac for both 2009 and 2010 open on my desk
+# so I can find the page and value I used last year, then find the
+# new values.
+
+# degrees, minutes, seconds
+def dms ( d, m, s )
+    return d + ( m + s/60.0 ) / 60.0
+end
+
+# hours, minutes, seconds
+def hms ( h, m, s )
+    return h + ( m + s/60.0 ) / 60.0
+end
+
+# days, hours, minutes
+def dhm ( d, h, m )
+    return d + ( h + m/60.0 ) / 24.0
+end
+
+# We have leap years because a tropical year
+# is actually 365.242190 days in length.
+def setleap ( year )
+    if year % 4 == 0
+	if year % 100 == 0 && year % 400 != 0
+	    return 0
+	else
+	    return 1
+	end
+    else
+    	return 0
+    end
+end
+
+PI = 3.141592654
+Degrad =  PI / 180.0
+
+# ----> Year, be sure and set this.
+Year = 2019
+
+# specifics for the MMT
+
+latitude = 31.68877778  # degrees
+longitude = 7.392303704 # hours west
+elevation = 2.606       # site elevation in kilometers (never used)
+timezone = 7.0		# hours from greenwich
+
+puts "C Start OF MKDATA GENERATED DATA"
+
+if setleap( Year ) == 0
+    days_per_year = 365.0
+else
+    days_per_year = 366.0
+end
+
+Dmid = days_per_year / 2.0
+
+# ----> TAUSUN - date of Perihelion.
+#    Almanac, page A1, "Perigee"
+#    Get the day and hour and put it below as d and h.
+d = 3.0
+h = 5.0
+
+tausun = d + h / 24.0
+puts "      DATA TAUSUN / #{tausun} /"
+
+# ----> OMGSUN - Longitude of Sun at perihelion.
+#	Based on day of perigee from above,
+#	we need to interpolate the entries for
+#	that day and the next day.
+#	almanac, page C6, table for ecliptic longitude.
+#	(page C4 prior to 2009)
+#       In 2009, interpolate Jan 4 and Jan 5 entry
+#       (in 2008 and 2010, with h=0 the second entry -could- have been anything)
+#	(in 2011, h=0, so just duplicate the entry.
+#	In 2018, interpolate the Jan 3 and 4 entry
+l1 = dms( 282.0, 18.0, 17.44 )
+l2 = dms( 283.0, 19.0, 28.17 )
+
+omgsun = l1 + (l2-l1) * h / 24.0
+puts "      DATA OMGSUN / #{omgsun} /"
+
+# ----> ECCSUN - Eccentricity of suns orbit.
+#    almanac, page C1, eccentricity at midyear
+
+# (2004) eccsun = 0.01669182 - 0.0000000115 * Dmid
+# (2005) eccsun = 0.01670653 - 0.0000000012 * Dmid
+# (2006) eccsun = 0.01668338 - 0.0000000116 * Dmid
+# (2007) eccsun = 0.01670569 - 0.0000000012 * Dmid
+# (2008) eccsun = 0.01670527 - 0.0000000012 * Dmid
+# (2009) eccsun = 0.01670485 - 0.0000000012 * Dmid
+# (2010) eccsun = 0.01670443 - 0.0000000012 * Dmid
+# (2011) eccsun = 0.01670401 - 0.0000000012 * Dmid
+# (2012) eccsun = 0.01670359 - 0.0000000012 * Dmid
+# (2013) eccsun = 0.01670317 - 0.0000000012 * Dmid
+# (2014) eccsun = 0.01670275 - 0.0000000012 * Dmid
+# (2015) eccsun = 0.01670233 - 0.0000000012 * Dmid
+# (2016) eccsun = 0.01670191 - 0.0000000012 * Dmid
+# (2017) eccsun = 0.01670149 - 0.0000000012 * Dmid
+# (2018) eccsun = 0.01670106 - 0.0000000012 * Dmid
+# (2019) eccsun = 0.01670064 - 0.0000000012 * Dmid
+eccsun = 0.01670064 - 0.0000000012 * Dmid
+puts "      DATA ECCSUN / #{eccsun} /"
+
+# ----> ETASUN - Average daily motion of sun.
+#    almanac, page E4 in 2004
+#	page E6 in 2007 and 2006 and 2005
+#	page E5 in 2008, 2009, 2010
+#	page E6 in 2011
+#	page E8 in 2011, 2012, 2013, 2014, ...
+#	page E8 in 2018
+#	in 2008 this changed to 15 entries every 25 days (15*25 = 375),
+#	in 2016 it changed to 12 entries
+#	whereas before we had 10 entries every 40 days (400 days).
+#	Table is labeled "Heliocentric Osculating Orbital Elements"
+#	look under Daily Motion column, 10 or 15 rows for earth.
+#	(these are earth orbital elements)
+
+eta = [	0.9855951,
+	0.9856119,
+	0.9856220,
+	0.9856132,
+	0.9856014,
+
+	0.9856165,
+	0.9856411,
+	0.9856392,
+	0.9856167,
+	0.9856003,
+
+	0.9855992,
+	0.9856102
+	]
+
+sum = 0.0
+eta.each { |e| sum += e }
+etasun = sum / eta.size
+puts "      DATA ETASUN / #{etasun} /"
+
+# ----> EPSUN - Obliquity of ecliptic
+#    almanac, page C1, obliquity of ecliptic
+#    midyear value
+
+# (2005) epsun = 23.438631 - 0.00000036 * Dmid
+# (2006) epsun = 23.438511 - 0.00000036 * Dmid
+# (2007) epsun = 23.438381 - 0.00000036 * Dmid
+# (2008) epsun = 23.438109 - 0.00000036 * Dmid
+# (2009) epsun = 23.438109 - 0.00000036 * Dmid
+# (2010) epsun = 23.437979 - 0.00000036 * Dmid
+# (2011) epsun = 23.437849 - 0.00000036 * Dmid
+# (2012) epsun = 23.437719 - 0.00000036 * Dmid
+# (2013) epsun = 23.437588 - 0.00000036 * Dmid
+# (2014) epsun = 23.437458 - 0.00000036 * Dmid
+# (2015) epsun = 23.437328 - 0.00000036 * Dmid
+# (2016) epsun = 23.437198 - 0.00000036 * Dmid
+# (2017) epsun = 23.437068 - 0.00000036 * Dmid
+# (2018) epsun = 23.436938 - 0.00000036 * Dmid
+# (2019) epsun = 23.436808 - 0.00000036 * Dmid
+epsun = 23.436808 - 0.00000036 * Dmid
+
+puts "      DATA EPSUN / #{epsun} /"
+
+# ----> DZERO - Julian Date at Jan 0 relative to
+#    Epoch 1900, Jan 0.5
+#    almanac, page B12 in 2006 and 2007 and 2008
+#    almanac, page B13 in 2009, ... 2013, 2014, ...
+#    almanac, page B13 in 2018
+# (note, 2003 Almanac page K5 says that
+# 1900 January 0 at 0h is JD = 2415019.5
+# we add the 0.5 to reckon JD from noon as usual.)
+
+# (2007) jd = 2454100.5
+# (2009) jd = 2454831.5
+# (2010) jd = 2455196.5
+# (2011) jd = 2455561.5
+# (2012) jd = 2455926.5
+# (2013) jd = 2456292.5
+# (2014) jd = 2456657.5
+# (2015) jd = 2457022.5
+# (2016) jd = 2457387.5
+# (2017) jd = 2457753.5
+# (2018) jd = 2458118.5
+# (2019) jd = 2458483.5
+jd = 2458483.5
+
+J1900 = 2415020.0
+jd = jd - J1900
+puts "      DATA DZERO / #{jd} /"
+
+# ECCM - constant of eccentricity for the lunar orbit.
+#    1977 explanatory supplement, page 107
+#    apparently never changes.
+eccm = 0.054900489
+puts "      DATA ECCM / #{eccm} /"
+
+# ----> RIMOON - Mean inclination of lunar orbit to eccliptic
+#    almanac, page D2, never changed through 2008.
+#    almanac, page D2, same for 2009, 2010, 2011, 2012,
+#		2013, 2014, 2015, 2016, 2017, 2018, 2019
+#rimoon = 5.1453964
+rimoon = 5.1566898
+puts "      DATA RIMOON / #{rimoon} /"
+
+# ----> ANEWM - First new moon at Greenwich.
+#    almanac, page A1
+#    subtract 7h for longitude.
+#    subtract 1d for midnight.
+# (2008) newmoon = dhm( 8.0, 11.0, 37.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2009) newmoon = dhm( 26.0, 7.0, 55.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2010) newmoon = dhm( 15.0, 7.0, 11.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2011) newmoon = dhm( 4.0, 9.0, 3.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2012) newmoon = dhm( 23.0, 7.0, 39.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2013) newmoon = dhm( 11.0, 19.0, 44.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2014) newmoon = dhm( 1.0, 11.0, 14.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2015) newmoon = dhm( 20.0, 13.0, 14.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2016) newmoon = dhm( 10.0, 1.0, 31.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2017) newmoon = dhm( 28.0, 0.0, 7.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2018) newmoon = dhm( 17.0, 2.0, 17.0 ) - dhm( 1.0, timezone, 0.0 )
+newmoon = dhm( 6.0, 1.0, 28.0 ) - dhm( 1.0, timezone, 0.0 )
+
+puts "      DATA ANEWM / #{newmoon} /"
+
+puts "      DATA YEAR / #{Year} /"
+
+leap = setleap( Year )
+puts "      DATA LEAP / #{leap} /"
+
+latrad = latitude * Degrad
+
+puts "      DATA PHI / #{latrad} /"
+puts "      DATA ALON / #{longitude} /"
+puts "      DATA TZONE / #{timezone} /"
+
+# ----> STMID1 - Sideral Time at Midnight, Jan 1.
+#	almanac page B12 in 2006
+#	almanac page B13 in 2009, ... 2016
+#	G. Sideral Time for Jan 1, 0h UT
+# (2005) stmid = hms( 6.0, 42.0, 58.4748 )
+# (2006) stmid = hms( 6.0, 42.0, 1.5159 )
+# (2007) stmid = hms( 6.0, 41.0, 4.5504 )
+# (2008) stmid = hms( 6.0, 40.0, 7.5881 )
+# (2009) stmid = hms( 6.0, 43.0, 7.1394 )
+# (2010) stmid = hms( 6.0, 42.0, 10.0357 )
+# (2011) stmid = hms( 6.0, 41.0, 12.8088 )
+# (2012) stmid = hms( 6.0, 40.0, 15.4861 )
+# (2013) stmid = hms( 6.0, 43.0, 14.6094 )
+# (2014) stmid = hms( 6.0, 42.0, 17.058 )
+# (2015) stmid = hms( 6.0, 41.0, 19.4297 )
+# (2016) stmid = hms( 6.0, 40.0, 21.7893 )
+# (2017) stmid = hms( 6.0, 43.0, 20.7109 )
+# (2018) stmid = hms( 6.0, 42.0, 23.1082 )
+stmid = hms( 6.0, 41.0, 25.6020 )
+
+puts "      DATA STMID1 / #{stmid} /"
+
+# ---------------------------------------------------------
+# Sunrise and Sunset
+#	almanac table A14
+#   Table entries are every 4 days, so we need to
+#   interpolate the day (unless we get lucky),
+#   and then interpolate the latitude.
+
+def interp ( ya, yb, xa, xb, x )
+#    return ya if x == xa
+    factor = (x - xa) / (xb - xa )
+    return ya + factor * ( yb - ya )
+end
+
+# ----> TSR - Time of Sunrise, January 2
+
+# in 2005 and 2006, we have entries for January 2
+# also for 2010, 2011, 2013, 2014, 2017, 2018, 2019
+tsr_30 = dhm( 2.0, 6.0, 56.0 )
+tsr_35 = dhm( 2.0, 7.0, 8.0 )
+tsr = interp( tsr_30, tsr_35, 30.0, 35.0, latitude )
+
+## in 2012, 2008, 2004, 2016 we had to interpolate to get this.
+## Here are the sunrise values for day_a (always set d=2.0)
+#day_a = -1.0
+#tsr_a_30 = dhm( 2.0, 6.0, 55.0 )
+#tsr_a_35 = dhm( 2.0, 7.0, 7.0 )
+#tsr_a = interp( tsr_a_30, tsr_a_35, 30.0, 35.0, latitude )
+#
+## Here are the sunrise values for day_b (always set d=2.0)
+#day_b = 3.0
+#tsr_b_30 =  dhm( 2.0, 6.0, 56.0 )
+#tsr_b_35 =  dhm( 2.0, 7.0, 8.0 )
+#tsr_b = interp( tsr_b_30, tsr_b_35, 30.0, 35.0, latitude )
+#
+#tsr = interp( tsr_a, tsr_b, day_a, day_b, 2.0 )
+
+puts "      DATA TSR / #{tsr} /"
+
+# ----> TSS - Time of Sunset, January 1
+# day_a and day_b are the days given in the almanac
+
+# Here are the sunset values for day_a (always set d=1.0)
+day_a = -2.0
+tss_a_30 = dhm( 1.0, 17.0, 9.0 )
+tss_a_35 = dhm( 1.0, 16.0, 57.0 )
+tss_a = interp( tss_a_30, tss_a_35, 30.0, 35.0, latitude )
+
+# Here are the sunset values for day_b (always set d=1.0)
+day_b = 2.0
+tss_b_30 =  dhm( 1.0, 17.0, 12.0 )
+tss_b_35 =  dhm( 1.0, 17.0, 0.0 )
+tss_b = interp( tss_b_30, tss_b_35, 30.0, 35.0, latitude )
+
+tss = interp( tss_a, tss_b, day_a, day_b, 1.0 )
+puts "      DATA TSS / #{tss} /"
+
+# ---------------------------------------------------------
+# ----> TMR/TMS - Time of Moonrise/set
+#
+# Moonrise and Moonset on January 1
+#	almanac table A46
+# Yikes!  some year we are gonna hit the case
+# when the moon never rises that night, then what ???
+
+# Moonrise, January 1
+tmr_30 =  dhm( 1.0, 2.0, 36.0 )
+tmr_35 =  dhm( 1.0, 2.0, 42.0 )
+tmr = interp( tmr_30, tmr_35, 30.0, 35.0, latitude )
+puts "      DATA TMR / #{tmr} /"
+
+# Moonset in this case is the next day (Jan 2).
+tms_30 =  dhm( 2.0, 14.0, 39.0 )
+tms_35 =  dhm( 2.0, 14.0, 31.0 )
+tms = interp( tms_30, tms_35, 30.0, 35.0, latitude )
+puts "      DATA TMS / #{tms} /"
+
+puts "C End OF MKDATA GENERATED DATA"
+
+# THE END

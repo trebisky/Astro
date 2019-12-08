@@ -1,0 +1,31 @@
+#!/usr/bin/ruby
+# mktxt
+
+Header = `cat header`
+
+if ARGV.size < 1
+	puts "usage: mktxt <file>"
+	exit
+end
+
+begin
+	f = open( ARGV[0], "r" )
+rescue
+	puts "Cannot open: #{ARGV[0]}"
+	exit
+end
+
+first = 1
+f.each { |l|
+	if /^<HEADER>$/.match( l )
+	    if first
+	    	first = nil
+		puts ""
+	    else
+		puts ""
+	    end
+	    puts Header
+	else
+	    puts l
+	end
+}

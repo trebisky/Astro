@@ -1,0 +1,100 @@
+The files used to generate the MMT almanac have been
+maintained by Tom Trebisky since perhaps 2005 or earlier.
+The files used to be kept on Cholla (Tom's desktop machine).
+Then they were moved to /mmt on hacksaw, and now they
+are kept in /mmt which is network mounted from our
+NAS box "nas1", which is on the mountain (as of 2012).
+
+You will need f77 (aka g77) to build the fortran
+as of fedora 25, you do this to get it:
+
+    dnf install compat-gcc-34-g77
+
+You also need enscript:
+
+    dnf install enscript
+
+----------------------------------------
+
+To make the almanac for a new year, do this:
+
+	0) cd /mmt/almanac
+	1) mkdir <new_year>
+	2) cp <last_year>/* to <new_year>
+	3) cd <new_year>
+	4) make clean
+	5) then do all the stuff below
+
+Then you should see these files:
+
+    Makefile - just what you would think,
+		EDIT to change year filenames (05>>06)
+    Readme - the file you are reading, not normally
+    		needing changes, unless you discover
+		something new.
+
+    almn.proto - read only - the prototype fortran code.
+
+    header - header text, EDIT to change dates.
+
+    mkdata - EDIT this like crazy based on the comments
+    		contained therein.
+		(this took about 30 minutes in 2006, with
+		the almanacs for both 2006 and 2007 in hand).
+
+    mksrc - should need no changes.
+    mktxt - should need no changes.
+
+After editing header and mkdata, you just invoke the Makefile.
+
+	"make all" will then do it
+
+Also, Marilyn (or Barbara) needs the value of ANEWM to plug into a
+spreadsheet of hers.  I just yank it out of a data statement in the
+almn06.f file.  In 2006 the value is/was 28.2951388888889
+(This is the day of the first new moon at Greenwich).
+
+Also send Marilyn the PDF copy of the schedule.
+
+-------------------------------------------
+
+In October 2006, I began studying and adding comments to the program.
+(This was triggered by a bug on October 28, 2006 where the moonset
+time was identical to that for October 29, namely 0:02, whereas it
+should have been about 22:50  All other entries for that day look OK).
+
+John Glaspey recommended the "skycal" program as a good tool to use
+for cross-checking our almanac.  Source code seems to be available
+in C, Python, Java, and a Tkinter(Python) front end is available.
+
+skycal is at:
+
+ ftp://iraf.noao.edu/contrib/
+
+ See  http://www.dartmouth.edu/~physics/faculty/thorstensen.html
+
+There are rumors (ill founded, I think) that our program traces back to
+some older version of skycal (which was written by John R. Thorstensen at
+Dartmouth), but after looking at the source code for both, I can see no
+trace of anything in common.
+
+i.e. I have no clue where our old fortran code came from.
+
+-------------------------------------------
+
+Note that we compile this with f77 which is g77.  I am tempted to
+bypass the 72 column fortran standard with the following g77 option:
+(regression tests will be necessary).
+
+-ffixed-line-length-n
+   Set column after which characters are ignored in typical fixed-form lines in
+   the source file, and through which spaces are assumed (as if padded to that
+   length) after the ends of short fixed-form lines.
+
+   Popular values for n include 72 (the standard and the default), 80 (card image),
+   and 132 (corresponds to ''extended-source'' options in some popular compilers).
+   n may be none, meaning that the entire line is meaningful and that continued
+   character constants never have implicit spaces appended to them to fill out the
+   line.  -ffixed-line-length-0 means the same thing as -ffixed-line-length-none.
+
+THE END

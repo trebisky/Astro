@@ -1,0 +1,872 @@
+      PROGRAM ALMNC 2004
+C  This is the MMT almanac program.
+C
+C  Handed down from Tony Poyner, to Craig Foltz, and in mid 2003
+C   passing into the hands of Tom Trebisky.
+C
+C  Comments added October, 2006 by Tom Trebisky
+C
+C  The original version compiled clean using f2c, but linux later
+C   moved to f77 which was more fussy about commas in FORMAT
+C   statements.  This necessitated some trivial cleanup in
+C   format 920 and others.  Remember that this is fortran with
+C   ancient standards from card punch days, in particular everything
+C   gets chopped off at column 72.  Output to file: almanac.
+C
+C  COMPUTES THE FOLLOWING TABLE OF ALMANAC
+C   DAILY M.S.T. OF SUNSET,CIVIL,NAUTIC. AND ASTR. TWILIGHT,SUNRISE,
+C   CIVIL,NAUTIC. AND ASTR. DAWN.,MOONRISE AND MOONSET(IF BETW. SUNSET AND
+C   SUNRISE),MOON AGE.SIDEREAL TIME AT MIDNIGHT M.S.T.,SID. TIME +AND-3HRS.
+C   AT ASTR. TWL. PRINTS ONE TABLE
+C
+      DIMENSION ZD(10),IPR(27),LPR(41),KPR(27)
+      CHARACTER MONTH(12)*3
+      INTEGER YEAR, DAYNO,STMH,STMM,STMS
+      DATA MONTH/'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug',
+     1 'Sep','Oct','Nov','Dec'/
+      character xlackr*1
+      character xlacks*1
+
+C
+C  Another program generates the following block of DATA
+C  statements and plugs them in in place of the marker
+C  below, the following values were used for the
+C  2007 Almanac.
+C
+C Start OF MKDATA GENERATED DATA
+C     DATA TAUSUN / 3.83333333333333 /
+C     DATA OMGSUN / 283.065029166667 /
+C     DATA ECCSUN / 0.016705471 /
+C     DATA ETASUN / 0.9856017 /
+C     DATA EPSUN / 23.4383153 /
+C     DATA DZERO / 39080.5 /
+C     DATA ECCM / 0.054900489 /
+C     DATA RIMOON / 5.1453964 /
+C     DATA ANEWM / 17.8756944444444 /  <---- old for 2007
+C     DATA YEAR / 2007 /
+C     DATA LEAP / 0 /
+C     DATA PHI / 0.553073508266036 /
+C     DATA ALON / 7.392303704 /
+C     DATA TZONE / 7.0 /
+C     DATA STMID1 / 6.68459733333333 /
+C     DATA TSS / 1.7133312037 /
+C     DATA TSR / 2.29170351852222 /
+C     DATA TMR / 1.62402493826667 /
+C     DATA TMS / 2.25537628086944 /
+C End OF MKDATA GENERATED DATA
+
+C Some notes on the above:
+C Tausun = 3.83  This is the date of perihelion,
+C  i.e the day when the earth is closest to the sun.
+C  these days January 4 more or less.
+C Omgsun = 283.06 degrees This is the longitude of the sun
+C                  at perihelion
+C Eccsun = 0.0167 The eccentricity of the suns orbit
+C                 at mid year.
+C Etasun = 0.9856 degrees The average daily motion of the sun.
+C Epsun = 23.4383 degrees The obliquity of the ecliptic
+C                 at mid year.
+C Dzero = 39080.5 MJD at January 0
+C Eccm = 0.0549 eccentricity of the lunar orbit.
+C Rimoon = 5.14 degrees - mean inclination of lunar orbit to the eccliptic.
+C Anewm = 17.8757 = Date of first new moon at Greenwich.
+C
+C Phi = 0.553 MMT latitude (radians)
+C Alon = 7.39 MMT longitude (hours west)
+C Tzone = 7.0 MMT timezone (hours)
+C
+C Stmid1 = 6.68 sidereal time at midnight January 1 (hours)
+C Tss = 1.71 time of sunset, January 1 (days)
+C Tsr = 2.29 time of sunrise, January 2 (days)
+C Tmr = 1.62 time of moonrise, January 1 (days)
+C Tms = 2.25 time of moonset, January 2 (days)
+
+<DATA>
+
+C This program is an ideal example of how NOT to write software.
+C or it could be viewed as an enbalmed example of how people
+C used to write software before they knew any better.
+
+      PI=3.14159
+      RAD=180./PI
+
+C OK, away we go .....
+C TJ is used by ADMOON
+
+      TJ=(YEAR-1900.)/100.
+
+C The Synodic Month - the mean time in days between two
+C consecutive new moons (the actual time varies a lot).
+      SYNM=29.530589
+
+      OPEN(1,FILE='almanac',STATUS='NEW')
+
+C     WRITE(1,920) DZERO,TJ,EPSUN,ECCM,RIMOON,PHI,STMID1,TMR,TMS,ANEWM
+C    2,TAUSUN,OMGSUN,ECCSUN,ETASUN,TSS,TSR,LEAP,TZONE,ALON
+
+      WRITE(*,920) DZERO,TJ,EPSUN,ECCM,RIMOON,PHI,STMID1,TMR,TMS,ANEWM
+     2,TAUSUN,OMGSUN,ECCSUN,ETASUN,TSS,TSR,LEAP,TZONE,ALON
+
+  920 FORMAT('   STARTING DATA',//,'   DZERO=',F8.1,'   TJ=',F5.2,/,
+     .       '  EPSUN=',F10.5,'   ECCM=',F15.9,'   RIMOON=',F15.7,/,
+     .       '   PHI=',F10.5,'   STMID1=',F10.5,'   TMR=',F10.5,
+     .       '   TMS=',F10.5,'    ANEWM',F10.2,/,
+     .       '  TAUSUN=',F9.5,'  OMGSUN=',F12.5,'  ECCSUN=',E15.5,
+     .       '  ETASUN=',F12.5,/,'  TSS=',F10.5,'  TSR=',F10.5,
+     .       '  LEAP=',I3,'   TZONE=',F2.0,'   ALON=',F10.5 )
+
+      OMGSUN=OMGSUN/RAD
+      ETASUN=ETASUN/RAD
+      EPSUN=EPSUN/RAD
+      RIMOON=RIMOON/RAD
+
+C CORT is a "trim value" in days to account for the difference
+C between our precise longitude (7.39) and the timezone (7.00)
+
+      CORT=(ALON-TZONE)/24.
+
+C adjust some other values for our longitude
+
+      STMID1=STMID1+TZONE+0.00274*TZONE-ALON
+      DZERO=DZERO+ALON/24.
+      TAUSUN=TAUSUN-ALON/24.
+
+      TSS=TSS+CORT
+      TSR=TSR+CORT
+      TMR=TMR+CORT
+      TMS=TMS+CORT
+
+      IUPR=0
+      IUPS=0
+
+C  ZENITH DISTANCES IN RADIANS
+C  Indexed by IEVENT
+C
+C Note the odd order of the following assignments.
+
+      ZD(1)=1.58534
+      ZD(5)=1.58534
+      ZD(2)=1.67552
+      ZD(6)=1.67552
+      ZD(3)=1.78024
+      ZD(7)=1.78024
+      ZD(4)=1.88496
+      ZD(8)=1.88496
+      ZD(9)=1.56861
+      ZD(10)=1.56861
+
+      L=366
+      IF(LEAP.EQ.1)L=L+1
+
+C Loop over days in the year.
+
+      DO 450 II=1,L
+      LACKR=0
+      LACKS=0
+
+C Sidereal Time at midnight.
+C Sidereal time moves at 15.04106699 arc-seconds / solar second
+C Which is 1.002737799 sidereal second / solar second.
+C In 24 solar hours, sidereal time advances 24.0657072 sidereal hours)
+C Hence the 0.0657098 factor (Tom gets 0.0657072, but that is OK)
+C Here we are only concerned with the time at midnight, which
+C advances each day by 0.0657 hours, in 365 days by 23.98 hours.
+
+      DAYNO=II
+C     write(*,9001) DAYNO
+C9001 FORMAT ( 1X, 'DAY -- ', i3 )
+
+      STMID = STMID1 + (.0657098* DAYNO)
+      IF(STMID .GT. 24.) STMID=STMID-24.       
+      CALL TIMES(STMID,STMH,STMM,STMS)
+      IPR(11)=STMH
+      IPR(12)=STMM
+      IPR(13)=STMS
+
+C Begin a loop for all events for a day.
+C An "event" is just one of sunrise, moonrise, ...
+C Event calculations loop back here until they are all done.
+C
+C  1 = sunset
+C  2 = sun 6  West
+C  3 = sun 12 West
+C  4 = sun 18 West
+C  5 = sunrise
+C  6 = sun 6  East
+C  7 = sun 12 East
+C  8 = sun 18 East
+C  9 = moonrise
+C 10 = moonset
+C 
+
+      IEVENT=0
+   20 IEVENT=IEVENT+1                              
+      IF(IEVENT .GT. 8) GO TO 216
+      IF(IEVENT .EQ. 1) GO TO 25                  
+      IF(IEVENT .EQ. 5) GO TO 27                 
+      GO TO 30                                  
+
+C moonrise or set
+
+  216 LICZ=1
+      IF(IEVENT .EQ. 9) GO TO 15
+      GO TO 16
+
+C go back a day for moonrise
+
+   15 STMID=STMID-0.0657098
+      GO TO 850
+
+   16 IF(IEVENT .EQ. 10)GO TO 851
+
+   25 T=TSS
+      GO TO 28                                      
+
+   27 T=TSR
+
+   28 TRANMS = TRUSUN(ETASUN,TAUSUN,T,ECCSUN)
+      CALL ADSUN(EPSUN,OMGSUN,TRANMS,ALPHA,DELTA)
+      GO TO 30
+
+  850 T=TMR
+      GO TO 402
+
+  851 T=TMS
+
+  402 D=DZERO+T
+      CALL ADMOON(D,TJ,DZERO,RIMOON,EPSUN,ALPHA,DELTA,ECCM,YEAR)
+
+C Compute hour angle of body at event.
+C PHI is our latitude in radians.
+
+   30 H1=COS(ZD(IEVENT))-SIN(PHI)*SIN(DELTA)         
+      H2=COS(PHI)*COS(DELTA)                           
+      HA=ACOS(H1/H2)                                  
+
+C all 10 events switch here.
+C "set" events go to 6, "rise" events go to 5
+
+      GO TO (6,6,6,6,5,5,5,5,5,6),IEVENT
+    5 HA=-HA
+    6 SIDT=(ALPHA + HA)*3.81972                         
+
+      IF(IEVENT.EQ.4) ST18W=SIDT
+      IF(IEVENT.EQ.8) ST18E=SIDT
+
+C Compute local fraction of day (since midnight mst) for event.
+C For events before midnight(1-4), fraction of day is time from
+C previous midnight to event.
+
+      STEL=SIDT-STMID
+      IF(IEVENT .LT. 5) STEL=SIDT-(STMID-.0657098)
+
+   50 IF(STEL .GT. 0.0) GO TO 51
+      STEL=STEL + 24.                                    
+      GO TO 50
+
+   51 IF(STEL.GT.24)STEL=STEL-24.
+      FRMSD=STEL * .99727/24.
+      IF(FRMSD.LT.0) FRMSD=FRMSD+1.
+
+C DAYNUM is only ever used right here ...
+      DAYNUM=FLOAT(DAYNO)     
+      DMSEVT=DAYNUM+FRMSD    
+
+      IF((IEVENT .NE. 9) .AND. (IEVENT .NE.10)) GO TO 215
+
+C Must be moonrise or moonset
+
+      IF(ABS(DMSEVT-T).LE.(1./(24*60))) GO TO 852
+      IF(LICZ.GE.10) GO TO 852
+      LICZ=LICZ+1
+      T=DMSEVT
+      GO TO 402
+
+  852 T=DMSEVT
+      IEVT=INT(T)+1
+      GO TO 200
+
+C Not moonrise or moonset
+
+  215 IEVT=DAYNO
+
+C      COMPUTE DATE AND M.S.T. OF EVENT.
+
+  200 CALL DATIME(IEVT ,FRMSD,LEAP,IMSTH,IMSTM,MNTH,NDAY,IEVENT)
+
+      GO TO (201,202,203,204,205,206,207,208,209,210),IEVENT 
+
+C 1: Sunset
+  201 TSSNEW=DMSEVT
+      IPR(1)=IMSTH
+      IPR(2)=IMSTM
+      GO TO 20                                             
+
+C 2: Sun at 6 degrees West
+  202 IPR(3)=IMSTH
+      IPR(4)=IMSTM
+      GO TO 20                                            
+
+C 3: Sun at 12 degrees West
+  203 IPR(5)=IMSTH
+      IPR(6)=IMSTM
+      GO TO 20                                           
+
+C 4: Sun at 18 degrees West
+  204 IPR(7)=IMSTH
+      IPR(8)=IMSTM
+      DAYNO=DAYNO+1
+      GO TO 20
+
+C 5: Sunrise
+  205 TSRNEW=DMSEVT
+      IPR(22)=IMSTH
+      IPR(23)=IMSTM
+      GO TO 20                   
+
+C 6: Sun at 6 degrees East
+  206 IPR(20)=IMSTH
+      IPR(21)=IMSTM
+      GO TO 20                  
+
+C 7: Sun at 12 degrees East
+  207 IPR(18)=IMSTH
+      IPR(19)=IMSTM
+      GO TO 20                 
+
+C 8: Sun at 18 degrees East
+  208 IPR(16)=IMSTH
+      IPR(17)=IMSTM
+      DAYNO=DAYNO-1
+      GO TO 20
+
+C 9: Moonrise
+  209 IPR(24)=IMSTH
+      IPR(25)=IMSTM
+      TMR=T+1.+1./SYNM
+      GO TO 20
+
+C 10: Moonset
+  210 AGE1=(DAYNO-ANEWM+SYNM)/SYNM
+      AGE2=(AGE1-INT(AGE1))*SYNM
+      AGE=AGE2*(28./SYNM)
+
+      IF(AGE.LT.14.) GO TO 500
+      AGE=AGE-28.
+  500 IPR(26)=IMSTH
+      IPR(27)=IMSTM
+      TMS=T+1.+1./SYNM
+
+C ------------ all events have been processed
+C falls through to here after event 10
+
+      RA3HE=ST18E+3.
+      IF(RA3HE.LT.0)RA3HE=RA3HE+24.
+
+      RA3HW=ST18W-3.      
+      IF(RA3HW.GT.24.) RA3HW=RA3HW-24.
+
+C RA 3H East at 18
+      CALL TIM(RA3HE,IRA3EH,IRA3EM)
+      IPR(14)=IRA3EH
+      IPR(15)=IRA3EM
+
+C RA 3H West at 18
+      CALL TIM(RA3HW,IRA3WH,IRA3WM)
+      IPR(9)=IRA3WH
+      IPR(10)=IRA3WM
+
+C First day in year is really the end of last year.
+C It does not appear on listings and is really just
+C setting things up for the next day (Evening of January 1)
+
+      IF(II.LE.1) GO TO 553
+
+C OK, we are beyond the first day.
+
+C 24 and 25 are moonrise H:M
+
+      IF(IPR(24).LE.1.AND.KPR(24).GE.22) GO TO 17
+      GO TO 18
+
+   17 KROZ=24*60 +IPR(24)*60+IPR(25) -KPR(24)*60-KPR(25)
+      IF(IABS(KROZ).LT.75) GO TO 18
+C Moonrise time
+      IPR(24)=0
+      IPR(25)=0
+
+C Tom Trebisky decided 10-2014 that just comparing hours is sloppy
+C  18 IF(IPR(24).GE.IPR(22).AND.IPR(24).LE.KPR(1)) GO TO 95
+   18 XMOON = KPR(24) + KPR(25)/60.0
+      XSR = KPR(22) + KPR(23)/60.0
+      XSS = KPR(1) + KPR(2)/60.0
+      IF ( XMOON .GT. XSR .AND. XMOON .LT. XSS ) GO TO 95
+
+      IF(IUPR.EQ.1) GO TO 80
+      IKPR=60*IPR(24)+IPR(25) -60*KPR(24)-KPR(25)
+      IF(IABS(IKPR).LT.10) GO TO 80
+      GO TO 81
+
+   80 KPR(24)=IPR(24)
+      KPR(25)=IPR(25)
+      IUPR=1
+      GO TO 86
+
+  81  IF(IPR(24).LE.IPR(22)) GO TO 80
+      GO TO 86
+
+C LACKR = 1 indicates no moonrise time
+   95 LACKR=1
+      IUPR=0
+
+   86 continue
+
+C 26 and 27 are Moonset time H:M
+      IF(IPR(26).LE.1.AND.KPR(26).GE.22) GO TO 21
+      GO TO 22
+
+   21 LROZ=24*60+IPR(26)*60+IPR(27)-KPR(26)*60-KPR(27)
+      IF(IABS(LROZ).LT.75) GO TO 22
+
+      IPR(26)=0
+      IPR(27)=0
+
+C Tom Trebisky decided 10-2014 that just comparing hours is sloppy
+C  22 IF(IPR(26).GE.IPR(22).AND.IPR(26).LE.KPR(1)) GO TO 96
+   22 XMOON = KPR(26) + KPR(26)/60.0
+      XSR = KPR(22) + KPR(23)/60.0
+      XSS = KPR(1) + KPR(2)/60.0
+      IF ( XMOON .GT. XSR .AND. XMOON .LT. XSS ) GO TO 96
+
+      IF(IUPS.EQ.1) GO TO 87
+      IKPR=60*IPR(26)+IPR(27)-60*KPR(26)-KPR(27)
+      IF(IABS(IKPR).LT.10) GO TO 87
+      GO TO 88
+
+   87 KPR(26)=IPR(26)
+      KPR(27)=IPR(27)
+      IUPS=1
+      GO TO 92
+
+  88  IF(IPR(26).LT.IPR(22)) GO TO 87
+      GO TO 92
+
+C LACKS = 1 indicates no moonset time
+   96 LACKS=1
+      IUPS=0
+
+C
+C note that IPR and KPR have 27 elements, LPR has 41
+C (LPR has 14 extra elements)
+C
+C The game now is to copy values into the LPR array and play
+C some tricks with the formatting to introducing leading zeros,
+C by introducing an extra array element which holds the last digit.
+C If we have sunset at 18:02 for example, we will use 3 array elements
+C in LPR and they will contain: 18,0,2
+C For the Midnight Sidereal time, we use 5 array elements since we
+C play the game with both minutes and seconds.  An LST of 7:03:00
+C would be stored as: 7,0,3,0,0
+C
+C  LPR( 1) = KPR( 1) = sunset hours
+C  LPR( 2) = KPR( 2) = sunset minutes/10
+C  LPR( 3) = KPR( 2) = sunset minutes%10
+C  LPR( 4) = KPR( 3) = sun  6 deg W hours
+C  LPR( 5) = KPR( 4) = sun  6 deg W minutes/10
+C  LPR( 6) = KPR( 4) = sun  6 deg W minutes%10
+C  LPR( 7) = KPR( 5) = sun 12 deg W hours
+C  LPR( 8) = KPR( 6) = sun 12 deg W minutes/10
+C  LPR( 9) = KPR( 6) = sun 12 deg W minutes%10
+C  LPR(10) = KPR( 7) = sun 18 deg W hours
+C  LPR(11) = KPR( 8) = sun 18 deg W minutes/10
+C  LPR(12) = KPR( 8) = sun 18 deg W minutes%10
+C  LPR(13) = KPR( 9) = RA 3H W @ 18 hours
+C  LPR(14) = KPR(10) = RA 3H W @ 18 minutes/10
+C  LPR(15) = KPR(10) = RA 3H W @ 18 minutes%10
+
+C  LPR(16) = KPR(11) = Sidereal Time at Midnight, hours
+C  LPR(17) = KPR(12) = Sidereal Time at Midnight, minutes/10
+C  LPR(18) = KPR(12) = Sidereal Time at Midnight, minutes%10
+C  LPR(19) = KPR(13) = Sidereal Time at Midnight, seconds/10
+C  LPR(20) = KPR(13) = Sidereal Time at Midnight, seconds%10
+
+C  LPR(21) = KPR(14) = RA 3H E @ 18 hours
+C  LPR(22) = KPR(15) = RA 3H E # 18 minutes/10
+C  LPR(23) = KPR(15) = RA 3H E # 18 minutes%10
+C  LPR(24) = KPR(16) = sun 18 deg E hours
+C  LPR(25) = KPR(17) = sun 18 deg E minutes/10
+C  LPR(26) = KPR(17) = sun 18 deg E minutes%10
+C  LPR(27) = KPR(18) = sun 12 deg E hours
+C  LPR(28) = KPR(19) = sun 12 deg E minutes/10
+C  LPR(29) = KPR(19) = sun 12 deg E minutes%10
+C  LPR(30) = KPR(20) = sun  6 deg E hours
+C  LPR(31) = KPR(21) = sun  6 deg E minutes/10
+C  LPR(32) = KPR(21) = sun  6 deg E minutes%10
+C  LPR(33) = KPR(22) = sunrise hours
+C  LPR(34) = KPR(23) = sunrise minutes/10
+C  LPR(35) = KPR(23) = sunrise minutes%10
+C
+C  LPR(36) = KPR(24) = moonrise hours
+C  LPR(37) = KPR(25) = moonrise minutes/10
+C  LPR(38) = KPR(25) = moonrise minutes%10
+C  LPR(39) = KPR(26) = moonset hours
+C  LPR(40) = KPR(27) = moonset minutes/10
+C  LPR(41) = KPR(27) = moonset minutes%10
+C 
+
+   92 continue
+
+C The following to debug the display of moonrise/moonset times
+C The times have always been correct, but whether we show them
+C or not has been buggy.  We want to show these events only
+C when they happen during night hours.
+C tjt 10-9-2014
+
+      xlackr = ' '
+      if ( lackr == 1 ) xlackr = '*'
+      xlacks = ' '
+      if ( lacks == 1 ) xlacks = '*'
+
+      write(*,9002) DAYNO, MONTH(MPR), IDAY,
+     . KPR(1), KPR(2), IPR(1), IPR(2),
+     . KPR(22), KPR(23),
+     . xlackr, KPR(24), KPR(25), xlacks, KPR(26), KPR(27),
+     . KPR(1), KPR(2),
+     . LACKR, LACKS
+ 9002 FORMAT ( 1X, 'DAY', I4, 1X, A3, I3,
+     .  ' [', I2, ':', I2, ' ', I2, ':', I2,  ']',
+     . 4x, I2, ':', I2,
+     . 2x, a1,I2, ':', I2,
+     . 2x, a1,I2, ':', I2,
+     . 4x, I2, ':', I2,
+     . i10, i10 )
+
+      KP=1
+      IP1=1
+      IP2=11
+
+   13 DO 7 IP=IP1,IP2,2
+      IS=IP+1
+      KR1=KP+1
+      KR2= KP+2
+      LPR(KP)=KPR(IP)
+      LPR(KR1)=KPR(IS)/10
+      IF(LPR(KR1).EQ.0) GO TO 11
+      GO TO 12
+   11 LPR(KR2)=KPR(IS)
+      GO TO 7
+   12 LPR(KR2)=KPR(IS)-10*LPR(KR1)
+    7 KP=KP+3
+
+      IF(KP.GT.38) GO TO 14
+      KP=21
+      IP1=14
+      IP2=26
+      GO TO 13
+
+   14 LPR(19)=KPR(13)/10
+      LPR(20)=KPR(13)-10*LPR(19)
+
+C Print page heading if this is the first day of the month.
+
+      IF (IDAY.GT.1) GOTO 550
+      write(1,944)
+944   format ( '<HEADER>' )
+
+C      write(1,9945)
+C      write(1,9945)
+C9945  format(3x)
+
+C<      2003          Sun     Sun     Sun    RA 3H RA 3H    Sun     Sun     Sun              Moon    Moon    MoonAge
+C>      2003          Sun     Sun     Sun    RA 3H                RA 3H    Sun     Sun     Sun              Moon    Moon    Moon Age
+
+      WRITE(1,945) YEAR
+  945 FORMAT(5X,I4,'          Sun     Sun     Sun    RA 3H            ',
+     . '    RA 3H    Sun     Sun     Sun              Moon    Moon    ',
+     . 'Moon Age')
+
+      WRITE(1,946)
+  946 FORMAT(' Date    Sunset   6 Deg   12 Deg  18 Deg  West at  Sid Tim
+     1e    East at 18 Deg  12 Deg  6 Deg  Sunrise    rise    set       a
+     2t')
+
+      WRITE(1,947)
+  947 FORMAT('                  W Hrz   W Hrz   W Hrz   18 Deg   Midnigh
+     1t    18 Deg  E Hrz   E Hrz   E Hrz                            Midn
+     2ight',/)
+
+C      PRINT OUTPUT LINE
+C  4 cases depending on whether we have moonrise/moonset times.
+C
+  550 IF(LACKR.EQ.1.AND.LACKS.EQ.1) GO TO 605
+      IF(LACKS.EQ.1) GO TO 607
+      IF(LACKR.EQ.1) GO TO 606
+
+C We have both moonrise and moonset.
+  604 WRITE(1,950) MONTH(MPR),IDAY,(LPR(KK),KK=1,41),AGEO
+  950 FORMAT(1H ,A3,I3,5(I5,I2,I1),I6,2(I2,I1),1X,5(I5,I2,I1),2X,2(I5,I2
+     1,I1),F8.1)
+      GO TO 553
+
+C We have only moonrise
+  607 WRITE(1,952) MONTH(MPR),IDAY,(LPR(KK),KK=1,38),AGEO
+  952 FORMAT(1H ,A3,I3,5(I5,I2,I1),I6,2(I2,I1),1X,5(I5,I2,I1),I7,I2,I1,8
+     1X,F8.1)
+      LPR(39)=60
+      GO TO 553
+
+C We have only moonset
+  606 WRITE(1,951) MONTH(MPR),IDAY,(LPR(KK),KK=1,35),(LPR(KE),KE=39,41),
+     1AGEO
+  951 FORMAT(1H ,A3,I3,5(I5,I2,I1),I6,2(I2,I1),1X,5(I5,I2,I1),10X,I5,I2,
+     1I1,F8.1)
+      LPR(36)=60
+      GO TO 553
+
+C We have neither moonrise or moonset
+  605 WRITE(1,953) MONTH(MPR),IDAY,(LPR(KK),KK=1,35),AGEO
+  953 FORMAT(1H ,A3,I3,5(I5,I2,I1),I6,2(I2,I1),1X,5(I5,I2,I1),18X,F8.1)
+      LPR(36)=60
+      LPR(39)=60
+
+C finished printing line for this day, on to the next day
+
+  553 CONTINUE
+      DO 72 IA=1,27
+   72 KPR(IA)=IPR(IA)
+
+      MPR=MNTH
+      IDAY=NDAY
+      AGEO=AGE
+
+      TSS=TSSNEW+1.
+      TSR=TSRNEW+1.  
+
+  450 CONTINUE
+
+C End of loop over days in year
+
+      STOP          
+      END          
+
+C Average daily moon.
+C D = 
+C T = (year-1950)/100
+
+      SUBROUTINE ADMOON(D,T,DAY  ,RINC,EPS,AMOON,DMOON,ECCM,YEAR)
+      INTEGER YEAR
+
+      PI=3.14159
+      RAD=180./PI
+
+      A1=270.434164+13.1763965268*D-0.001133*(T**2)+0.0000019*(T**3)
+      A2=A1/360.
+      A3=A1-360.*INT(A2)
+      GMOONL=A3/RAD
+
+      B1=334.329556+0.1114040803*D-0.010325*(T**2)-0.000012*(T**3)
+      B2=B1/360.
+      B3=B1-360.*INT(B2)
+      PERL=B3/RAD
+      ANMEAN=GMOONL-PERL
+
+      V=TRUANM(ANMEAN,ECCM)
+      APPL=V+PERL
+      IF(APPL.GT.6.28318) APPL=APPL-6.28318
+      DA=D-DAY+INT(0.5+365.25*(YEAR-1970))
+      C1=-791.12/57.29578+(11.316506/57.29578)*DA
+      EVEC=0.02225*SIN(C1)
+      D1=-908.88/57.29578+(24.381498/57.29578)*DA
+      VAR=0.01149*SIN(D1)
+      E1=356.8/57.29578+(0.985600/57.29578)*DA
+      AE=-0.00323*SIN(E1)
+      RLMOON=APPL+EVEC+VAR+AE
+      F1=259.183275-0.0529539222*D+0.002078*(T**2)+0.000002*(T**3)
+      F2=F1/360.
+      ANL=(F1-360.*INT(F2))/RAD
+      SIDE=RLMOON-ANL
+      SINB=SIN(  SIDE)*SIN(RINC)
+      BMOON=ASIN(SINB)
+C  FOR COMPUTATION OF ALPHA AND DELTA OF THE MOON, USE THE EQUATIONS BELOW.
+      SIND=SINB*COS(EPS)+COS(BMOON)*SIN(EPS)*SIN(RLMOON)
+      DMOON=ASIN(SIND)
+      COSA=COS(BMOON)*COS(RLMOON)/COS(DMOON)
+      SINA=(-SIN(BMOON)*SIN(EPS)+COS(BMOON)*COS(EPS)*SIN(RLMOON))/COS(
+     2DMOON)
+      AMOON=ATAN2(SINA,COSA)
+      RETURN
+      END
+
+      FUNCTION TRUANM (AM,ECC)
+      A=AM
+      E=A
+      IT=0
+
+  100 DE=(A+ECC*SIN(E)-E)/(1.0-ECC*COS(E))
+      E=E+DE
+      IF(ABS(DE)-.006) 200,200,101
+C	NOTE - TEST WAS .0001, BUT COULD NEVER REACH IT
+  101 IT=IT+1
+      IF(IT-40) 100,100,999
+
+  999 WRITE(*,998) A, ECC, E, DE
+  998 FORMAT (1X,'IT. FAIL IN TRUANM ',4E13.3)
+      STOP
+
+  200 U=SQRT((1.0 + ECC)/(1.0-ECC))*TAN(0.5 *E)
+      TRUANM=2.0*ATAN(U)
+      RETURN
+      END
+
+C  TRUSUN
+C   Computes mean anomaly (A) from mean motion (ETA) and time since epoch
+C   (T-TAU).  Using A, function then computes true anomaly (TRUANM)
+C   for an orbit of eccentricity ECC.  Kepler"s equation is solved as an
+C   intermediate step.  All angles in radians.
+
+      FUNCTION TRUSUN (ETA,TAU,T,ECC)
+
+      A=ETA*(T-TAU)
+      ADEG=A*57.29578
+      E=A                               
+      IT=0                               
+
+  100 DE=(A+ECC*SIN(E)-E)/(1.0-ECC*COS(E))
+      E=E+DE                              
+      IF(ABS(DE)-.006) 200,200,101
+C	NOTE - AS BEFORE, TEST WAS .0001   
+  101 IT=IT+1
+      IF(IT-40) 100,100,999                 
+
+  999 WRITE(*,998) A, ECC, E, DE
+  998 FORMAT (1X,'IT. FAIL IN TRUSUN ',4E13.3)
+      STOP                                   
+
+  200 U=SQRT((1.0 + ECC)/(1.0-ECC))*TAN(0.5 *E)
+      TRUSUN=2.0*ATAN(U)
+      RETURN         
+      END
+
+C  DATIME
+C   Computes month, day, m.s.t. in hours, mins., and secs. for event.
+C   IDAY is day no. of last day of each month.  Values 1-12 are for non-
+C   leap year.  Values 13-24 are for leap year.
+C   Day number is DAYNO-1 because by events 5-8 we are actually in the
+C   following day.  Yet these events are to be listed on the line for the
+C   previous day.  (Sunrise Jan 2 will be listed as the last sun event for
+C   Jan 1)
+C
+      SUBROUTINE DATIME(DAYNO,FRMSD,LEAP,IMSTH,IMSTM,MNTH,NDAY,
+     1IEVENT)         
+      INTEGER DAYNO      
+      DIMENSION IDAY(24)
+      DATA IDAY/31,59,90,120,151,181,212,243,273,304,334,366
+     1,31,60,91,121,152,182,213,244,274,305,335,367/
+
+      HMST=FRMSD*24.   
+      IF(HMST.LT.0) HMST=HMST+24.
+      IMSTH=INT(HMST)           
+      HFRMST=HMST-IMSTH        
+      ZMSTM=HFRMST*60.        
+      IMSTM=INT(ZMSTM)       
+      FRMSTM=ZMSTM-IMSTM    
+      SMST=FRMSTM*60.      
+      IMSTS=INT(SMST)     
+      IF(IMSTS .GT. 30) IMSTM=IMSTM+1
+
+      IF(IMSTM.LT.60) GO TO 21
+
+      IMSTM=0
+      IMSTH=IMSTH+1
+
+C  Compute month and date only after all events have been processed.
+
+   21 IF(IEVENT .LT.10) GO TO 50
+
+      IF(LEAP)5,5,10                                      
+    5 J=0                                                
+      GO TO 20                                          
+
+   10 J=12                                             
+
+   20 CONTINUE                                        
+      IF((DAYNO-1)-31) 25,25,30
+   25 MNTH=1                  
+      NDAY=DAYNO-1
+      GO TO 50               
+
+   30 CONTINUE              
+      IF((DAYNO-1).GT.IDAY(J+MNTH)) MNTH=MNTH+1
+      IF(MNTH .GT. 12) GO TO 100 
+      NDAY=(DAYNO-1)-IDAY(J+MNTH-1)
+
+   50 RETURN                                               
+
+  100 STOP                                                  
+      END                                                    
+
+C ADSUN - Average Daily Sun
+C  Computes RA and DEC of sun from inclination (eps), longitude of
+C  perihelion (OMG), and true anomaly (TRUANM).  Angles in radians.
+C EPS = 
+C OMG = 
+C TRUANM
+C returns ALPHA
+C returns DELTA
+C
+      SUBROUTINE ADSUN(EPS,OMG,TRUANM,ALPHA,DELTA)
+
+      TRULNG=OMG+TRUANM                                       
+
+C--FOR TEST, PRINT OUT TRULNG IN DEGREES,MIN,SEC
+c      TLDEG=TRULNG*57.29578
+c      ITLDEG=INT(TLDEG)
+c      TLD=FLOAT(ITLDEG)
+c      TLDFR=TLDEG-TLD
+c      TLMIN=TLDFR*60.
+c      ITLMIN=INT(TLMIN)
+c      TLM=FLOAT(ITLMIN)
+c      TLMFR=TLMIN-TLM
+c      TLSEC=TLMFR*60.
+
+C     TALPH=COS(EPS)*TAN(TRULNG)
+
+      A1=COS(EPS)*SIN(TRULNG)  
+      A2=COS(TRULNG)          
+
+      ALPHA=ATAN2(A1,A2)     
+      IF(ALPHA .LT. 0.) ALPHA=6.28318+ALPHA                        
+
+      SDELT=SIN(TRULNG)*SIN(EPS)                                  
+      DELTA=ASIN(SDELT)                                          
+
+      RETURN                                                    
+      END                                                      
+
+C Used only to format "Sidereal Time at Midnight"
+C which is the only time that we show seconds for.
+C Time in hours --> H M S
+      SUBROUTINE TIMES(TM,IH,M,IS)
+      IH=INT(TM)
+      A=TM-IH
+      B=A*60.
+      M=INT(B)
+      C=B-M
+      IS=INT(C*60.+0.5)
+      RETURN
+      END
+
+C Used to format time values
+C Time in hours --> H M
+      SUBROUTINE TIM(TM,IH,M)
+      IH=INT(TM)
+      A=TM-IH
+      B=A*60.
+      M=INT(B)
+      C=B-M
+      CC=INT(C*60.)
+      IF(CC.GT.30) M=M+1
+      RETURN
+      END
+
+C THE END

@@ -1022,6 +1022,9 @@ xx_solar ( void )
 
 #define TWENTY	(20.0 * DEGRAD)
 
+/* This finds ALL the lunations for a year.
+ */
+
 void
 test_anew ( void )
 {
@@ -1045,7 +1048,7 @@ test_anew ( void )
 
 	set_day ( &now, year, 1, 1 );
 
-	// printf ( "ANEW search for %d -- %s\n", ANEW_YEAR, ANEW_STR );
+	printf ( "ANEW search for %d -- %s\n", year, ANEW_STR );
 	for ( ;; ) {
 	    sun_apc_ll ( now.mjd0, &s_lat, &s_long, 0 );
 	    moon_apc_ll ( now.mjd0, &m_lat, &m_long );
@@ -1094,8 +1097,8 @@ test_anew ( void )
  *  for the specified year.
  * The value returned is in units of days (with 0.x being in January 1)
  */
-double
-calc_anew ( int year, int verbose )
+void
+print_anew ( int year )
 {
 	struct day now;
 	struct day prior;
@@ -1118,6 +1121,8 @@ calc_anew ( int year, int verbose )
 	for ( ;; ) {
 	    sun_apc_ll ( now.mjd0, &s_lat, &s_long, 0 );
 	    moon_apc_ll ( now.mjd0, &m_lat, &m_long );
+	    /* Values in radians */
+	    printf ( "Day %d, moon, sun %.2f %.2f\n", now.day, m_long, s_long );
 
 	    dif = m_long - s_long;
 	    if ( dif > PI )
@@ -1144,9 +1149,9 @@ calc_anew ( int year, int verbose )
 		    // printf ( "%d %s %2d -- New moon2: %8s %8.4f\n", year, month_name[prior.month-1], prior.day, s_dms(buf,f), anew );
 		}
 		anew = (aday - 1) + f / 24.0;
-		if ( verbose )
-		    printf ( "%d %s %2d -- New moon: %8s %8.4f\n", year, month_name[amon], aday, s_dms(buf,f), anew );
-		return anew;
+		printf ( "%d %s %2d -- New moon: %8s (ANEW = %8.4f)\n", year, month_name[amon], aday, s_dms(buf,f), anew );
+		// return anew;
+		return;
 	    }
 
 	    first = 0;
@@ -1157,15 +1162,7 @@ calc_anew ( int year, int verbose )
 	}
 
 	printf ( "BIG trouble in %d\n", year );
-	return 0.0;
-}
-
-void
-print_anew ( int year )
-{
-	double anew;
-
-	anew = calc_anew ( year, 1 );
+	// return 0.0;
 }
 
 void
@@ -1759,8 +1756,6 @@ just_today ( int verbose )
 
 	printf ( "Moonrise: %s  (%s)\n", s_dms(buf1,ep->moon_rise), s_dm(buf2,ep->moon_rise) );
 	printf ( "Moonset:  %s  (%s)\n", s_dms(buf1,ep->moon_set), s_dm(buf2,ep->moon_set) );
-
-	print_anew ( year );
 }
 
 /* ---------------------------------------------------------- */
@@ -1804,6 +1799,10 @@ main ( int argc, char **argv )
 	printf ( "\n" );
 	anew_table ();
 #endif
+
+	print_anew ( 2019 );
+	printf ( "\n" );
+	test_anew ();
 
 	// printf ( "Done\n" );
 }
