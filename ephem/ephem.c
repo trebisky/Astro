@@ -1877,6 +1877,22 @@ moon_apc ( double mjd, double *ra, double *dec )
 
 /* ---------------------------------------------------------- */
 
+#include <time.h>
+
+void
+set_today ( struct day *today )
+{
+	time_t now;
+	struct tm *info;
+
+	time( &now );
+	info = localtime( &now );
+
+	// printf("Current local time and date: %s", asctime(info));
+
+	set_day ( today, 1900 + info->tm_year, 1 + info->tm_mon, info->tm_mday );
+}
+
 void
 just_today ( int verbose )
 {
@@ -1885,19 +1901,16 @@ just_today ( int verbose )
 	char buf1[32];
 	char buf2[32];
 
-	int year;
-	int month;
-	int day;
+	// int year = 2019;
+	// int month = 12;
+	// int day = 9;
+	// set_day ( &now, year, month, day );
 
-	year = 2019;
-	month = 12;
-	day = 7;
+	set_today ( &now );
 
-	printf ("%s %d %d\n", month_name_full[month-1], day, year );
+	printf ("%s %d %d\n", month_name_full[now.month-1], now.day, now.year );
 
 	init_site ( &site_info, &site_mmt );
-
-	set_day ( &now, year, month, day );
 
 	ep = ephem_info;
 	rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
