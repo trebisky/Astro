@@ -1143,32 +1143,46 @@ anew_diff ( double mjd )
  *  This refinement yields improvement, but not an exact match.
  *
  * f is time within the day in units of hours.
+ *   This routine returns an adjusted "f"
  * 
  * XXX - caller needs to beware that f could get adjusted into
  *  the prior or the following day in rare cases.
  */
-void
-refine_anew ( struct day *d, double f )
+double
+refine_anew_internal ( double mjd, double f )
 {
-	char buf[32];
 	double f1, f2;
 	double d1, d2;
 	double fnew;
-
-	// printf ( "%d %s %2d -- New moon: %s\n", year, month_name[prior2.month-1], prior2.day, s_dms(buf,f) );
-	// printf ( "%d %s %2d -- N() moon: %s\n", d->year, month_name[d->month-1], d->day, s_dms(buf,f) );
 
 	/* Use 15 minutes on either side */
 	f1 = f - 0.25;
 	f2 = f + 0.25;
 
-	d1 = anew_diff ( d->mjd0 + f1 / 24.0 );
-	d2 = anew_diff ( d->mjd0 + f2 / 24.0 );
+	d1 = anew_diff ( mjd + f1 / 24.0 );
+	d2 = anew_diff ( mjd + f2 / 24.0 );
 
 	// printf ( "  %.3f  %.3f\n", d1, d2 );
 	// (usually .002, .003)
 
 	fnew = f1 - d1 * (f2 - f1) / (d2 - d1);
+
+	return fnew;
+}
+
+double
+refine_anew_mjd ( double mjd, double f )
+{
+	return mjd + refine_anew_internal ( mjd, f ) / 24.0;
+}
+
+double
+print_anew ( struct day *d, double f )
+{
+	char buf[32];
+	double fnew;
+
+	fnew = refine_anew_internal ( d->mjd0, f );
 
 	printf ( "%d %s %2d -- New moon: %s\n", d->year, month_name[d->month-1], d->day, s_dms(buf,fnew) );
 }
@@ -1179,7 +1193,7 @@ refine_anew ( struct day *d, double f )
  * 
  * for 2019, it prints the first one as follows:
  *   2019 Jan  6 -- New moon: 1:31:56
- * however, the routine below (print_anew()) prints this:
+ * however, the routine below (print_anew_all()) prints this:
  *   2019 Jan  5 -- New moon: 18:31:56 (ANEW =   4.7722)
  *
  * Indeed in local time the new moon is at 18:31 on 1/5
@@ -1228,10 +1242,10 @@ test_anew ( int year )
 		if ( f < 0.0 ) {
 		    prior_day ( &prior, &prior2 );
 		    f += 24.0;
-		    refine_anew ( &prior2, f );
+		    print_anew ( &prior2, f );
 		    // printf ( "%d %s %2d -- New moon: %s\n", year, month_name[prior2.month-1], prior2.day, s_dms(buf,f) );
 		} else {
-		    refine_anew ( &prior, f );
+		    print_anew ( &prior, f );
 		    // printf ( "%d %s %2d -- New moon: %s\n", year, month_name[prior.month-1], prior.day, s_dms(buf,f) );
 		}
 		++count;
@@ -1266,10 +1280,24 @@ test_anew ( int year )
 2019 Dec 26 -- New moon: 5:19:04
  */
 
+/* Note that the Synodic month (the time between "lunations" varies.
+ * The time can vary from 29.18 to 29.93 days because the speed of the earth
+ * around the sun varies in the earth's eliptical orbit.
+ * An average value of 29.53 days is often quoted.
+ * One spot check (the first two in 2012) yielded 29.62 days and I was
+ * concerned that this did not match 29.53 until I learned more.
+ */
+
 /* This walks forward to the next new moon from the given day
  */
-void
-next_newm ( int year, int month, int day )
+
+#ifdef notdef
+/* XXX - now completely broken due to redefinitions of refine_anew()
+ * Active code now uses next_newm_mjd()
+ */
+double
+// next_newm ( int year, int month, int day )
+next_newm ( struct day *arg )
 {
 	struct day now;
 	struct day prior;
@@ -1279,15 +1307,17 @@ next_newm ( int year, int month, int day )
 	double f;
 	char buf[32];
 	int first = 1;
+	double val;
 
-	init_site ( &site_info, &site_mmt );
+	// init_site ( &site_info, &site_mmt );
 
-	set_day ( &now, year, month, day );
+	// set_day ( &now, year, month, day );
+	now = *arg;	/* structure assignment */
 
 	// printf ( "ANEW search for %d -- %s\n", year, ANEW_STR );
 	// printf ( "ANEW search for %d\n", year );
 	// printf ( "Lunations for %d\n", year );
-	printf ( "Next new moon after: %s %d, %d\n", month_name[month-1], day, year );
+	printf ( "Next new moon after: %s %d, %d\n", month_name[now.month-1], now.day, now.year );
 
 	for ( ;; ) {
 	    dif = anew_diff ( now.mjd0 );
@@ -1306,13 +1336,13 @@ next_newm ( int year, int month, int day )
 		if ( f < 0.0 ) {
 		    prior_day ( &prior, &prior2 );
 		    f += 24.0;
-		    refine_anew ( &prior2, f );
+		    val = refine_anew ( &prior2, f, 0 );
 		    // printf ( "%d %s %2d -- New moon: %s\n", prior2.year, month_name[prior2.month-1], prior2.day, s_dms(buf,f) );
 		} else {
-		    refine_anew ( &prior, f );
+		    val = refine_anew ( &prior, f, 0 );
 		    // printf ( "%d %s %2d -- New moon: %s\n", prior.year, month_name[prior.month-1], prior.day, s_dms(buf,f) );
 		}
-		return;
+		return val;
 	    } else {
 		// printf ( "\n" );
 	    }
@@ -1324,6 +1354,46 @@ next_newm ( int year, int month, int day )
 	    next_day ( &now );
 	}
 }
+#endif
+
+/* The above routine, but working only with mjd values */
+double
+next_newm_mjd ( double now )
+{
+	double prior;
+	double prior2;
+	double dif;
+	double last_dif;
+	double f;
+	int first = 1;
+	double val;
+
+	printf ( "Next new moon after: %.3f\n", now );
+
+	for ( ;; ) {
+	    dif = anew_diff ( now );
+		
+	    if ( ! first && dif > 0.0 && last_dif < 0.0 ) {
+		prior = now - 1.0;
+		// prior_day ( &now, &prior );
+		f = -last_dif / (dif - last_dif) * 24.0 + site_info.tz;
+		if ( f < 0.0 ) {
+		    prior2 = prior - 1.0;
+		    // prior_day ( &prior, &prior2 );
+		    f += 24.0;
+		    val = refine_anew_mjd ( prior2, f );
+		} else {
+		    val = refine_anew_mjd ( prior, f );
+		}
+		return val;
+	    }
+
+	    first = 0;
+	    last_dif = dif;
+
+	    now += 1.0;
+	}
+}
 
 /* Copied and pruned from the above
  * The idea here is to calculate the time of the first new moon
@@ -1332,7 +1402,7 @@ next_newm ( int year, int month, int day )
  * This was used to generate the big anew table given to the MMT in early 2019
  */
 void
-print_anew ( int year )
+print_anew_year ( int year )
 {
 	struct day now;
 	struct day prior;
@@ -1396,7 +1466,7 @@ anew_table ( void )
 
 	for ( year = 2000; year < 2100; year++ ) {
 	    // calc_anew ( year );
-	    print_anew ( year );
+	    print_anew_year ( year );
 	}
 }
 
@@ -1903,10 +1973,24 @@ moon_apc ( double mjd, double *ra, double *dec )
 	ll_to_rd ( m_lat, m_long, ra, dec );
 }
 
+/* The time between new moons is at most 29.93 days, so this should
+ * bump is back before the prior new moon.
+ */
+#define SYNODIC_JOG	31.0
+
 double
 moon_age ( struct day *d )
 {
-	return 12.34;
+	double newm;
+	double newm_prior;
+
+	printf ( "MJD cur : %14.4f\n", d->mjd0 );
+	newm = next_newm_mjd ( d->mjd0 );
+	printf ( "MJD newm: %14.4f\n", newm );
+	newm_prior = next_newm_mjd ( newm - SYNODIC_JOG );
+	printf ( "MJD newm: %14.4f\n", newm_prior );
+
+	return d->mjd0 - newm_prior;
 }
 
 /* ---------------------------------------------------------- */
@@ -1936,6 +2020,8 @@ just_today ( int verbose )
 	char buf2[32];
 	double age;
 
+	init_site ( &site_info, &site_mmt );
+
 	// int year = 2019;
 	// int month = 12;
 	// int day = 9;
@@ -1944,8 +2030,6 @@ just_today ( int verbose )
 	set_today ( &now );
 
 	printf ("%s %d %d\n", month_name_full[now.month-1], now.day, now.year );
-
-	init_site ( &site_info, &site_mmt );
 
 	ep = ephem_info;
 	rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
@@ -2008,16 +2092,11 @@ main ( int argc, char **argv )
 	anew_table ();
 
 	printf ( "\n" );
-	print_anew ( 2019 );
-#endif
+	print_anew_all ( 2019 );
 
 	printf ( "\n" );
 	test_anew ( 2019 );
-
-	for ( m=1; m<13; m++ )
-	    next_newm ( 2019, m, 1 );
-	next_newm ( 2018, 12, 28 );
-	next_newm ( 2019, 12, 28 );
+#endif
 
 	// printf ( "Done\n" );
 }
