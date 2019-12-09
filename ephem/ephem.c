@@ -196,6 +196,9 @@ is_leap ( int year )
  *  so for my purposes we could eliminate the test below.
  * This expects month as 1 .. 12
  * This expects day as 1 ... N
+ *
+ * MJD is zero at midnight.
+ * JD is zero at noon.
  */
 double 
 calc_mjd ( struct day *tp )
@@ -1368,7 +1371,7 @@ next_newm_mjd ( double now )
 	int first = 1;
 	double val;
 
-	printf ( "Next new moon after: %.3f\n", now );
+	// printf ( "Next new moon after: %.3f\n", now );
 
 	for ( ;; ) {
 	    dif = anew_diff ( now );
@@ -1974,7 +1977,7 @@ moon_apc ( double mjd, double *ra, double *dec )
 }
 
 /* The time between new moons is at most 29.93 days, so this should
- * bump is back before the prior new moon.
+ * bump us back before the prior new moon.
  */
 #define SYNODIC_JOG	31.0
 
@@ -1983,14 +1986,22 @@ moon_age ( struct day *d )
 {
 	double newm;
 	double newm_prior;
+	double age;
+	double age_prior;
 
-	printf ( "MJD cur : %14.4f\n", d->mjd0 );
+	//printf ( "MJD cur : %14.4f\n", d->mjd0 );
 	newm = next_newm_mjd ( d->mjd0 );
-	printf ( "MJD newm: %14.4f\n", newm );
+	//printf ( "MJD newm: %14.4f\n", newm );
 	newm_prior = next_newm_mjd ( newm - SYNODIC_JOG );
-	printf ( "MJD newm: %14.4f\n", newm_prior );
+	//printf ( "MJD newm: %14.4f\n", newm_prior );
 
-	return d->mjd0 - newm_prior;
+	age = newm - d->mjd0;
+	age_prior =  d->mjd0 - newm_prior;
+
+	if ( age < age_prior )
+	    return -age;
+	else
+	    return age_prior;
 }
 
 /* ---------------------------------------------------------- */
