@@ -159,7 +159,7 @@ void test_sun2 ( void );
 void test_sun3a ( void );
 void test_sun3b ( void );
 void test_almanac ( void );
-void test_anew ( void );
+void test_anew ( int );
 void anew_table ( void );
 void show_old_newm ( void );
 
@@ -191,6 +191,41 @@ is_leap ( int year )
 	return 1;
 }
 
+/* Calculate the MJD for a given year, month, and day
+ *  For years after 1582, we are using the Gregorian calendar,
+ *  so for my purposes we could eliminate the test below.
+ * This expects month as 1 .. 12
+ * This expects day as 1 ... N
+ */
+double 
+calc_mjd ( struct day *tp )
+{
+	int m;
+	int y;
+	int b;
+	int a;
+	double mjd;
+
+	m = tp->month;
+	y = tp->year;
+	if ( m <= 2 ) {
+	    m += 12;
+	    y--;
+	}
+
+	if ( y * 10000 + m * 100 + tp->day <= 15821004 ) {
+	    /* Julian before 1582 */
+	    b = -2 + ((y+4716)/4) - 1179;	/* Julian calendar */
+	} else {
+	    /* Gregorian after 1582, We do this */
+	    b = y/400 - y/100 + y/4;		/* Gregorian calendar */
+	}
+
+	a = 30.6001*(m+1);
+	mjd = 365 * y -679004 + b + a + tp->day;
+	return mjd;
+}
+
 void
 set_day ( struct day *tp, int y, int m, int d )
 {
@@ -208,10 +243,44 @@ set_day ( struct day *tp, int y, int m, int d )
 }
 
 /* Iterate through all the days in a year.
+ * - this is happy to run into the next year!
+ * (not what you usually want).
+ */
+void
+next_day ( struct day *tp )
+{
+	if ( tp->day >= tp->days_in_month ) {
+	    if ( tp->month == 12 ) {
+		++tp->year;
+		if ( is_leap ( tp->year ) )
+		    tp->dpm = dpm_leap;
+		else
+		    tp->dpm = dpm_normal;
+		tp->month = 1;
+		tp->days_in_month = tp->dpm[tp->month-1];
+		tp->day = 1;
+		tp->mjd0 = calc_mjd ( tp );
+		tp->jd0 = tp->mjd0 + MJD_OFFSET;
+		return;
+	    }
+	    ++tp->month;
+	    tp->days_in_month = tp->dpm[tp->month-1];
+	    tp->day = 1;
+	    tp->mjd0 = calc_mjd ( tp );
+	    tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	    return;
+	}
+	++tp->day;
+	tp->mjd0 = calc_mjd ( tp );
+	tp->jd0 = tp->mjd0 + MJD_OFFSET;
+	return;
+}
+
+/* Iterate through all the days in a year.
  * returns 0 at end of year.
  */
 int
-next_day ( struct day *tp )
+next_day_y ( struct day *tp )
 {
 	if ( tp->day >= tp->days_in_month ) {
 	    if ( tp->month == 12 )
@@ -928,7 +997,7 @@ test_almanac ( void )
 	    printf ( "   %s", s_dm_b(buf,ep->sun_rise) );
 	    printf ( "\n" );
 
-	    // s = next_day ( &now );
+	    // s = next_day_y ( &now );
 	    s = next_day_m ( &now );
 	    if ( s == 0 )
 		break;
@@ -1005,12 +1074,35 @@ xx_solar ( void )
 }
 #endif
 
+/* The ANEW_STR value is from the Blue book (Astronomical Almanac)
+ * as per these comments in my old mkdata program:
+ * These values were important for verification and testing
+ * of this program, but are now only of historic interest.
+ *
+# ----> ANEWM - First new moon at Greenwich.
+#    almanac, page A1
+#    subtract 7h for longitude.
+#    subtract 1d for midnight.
+# (2008) newmoon = dhm( 8.0, 11.0, 37.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2009) newmoon = dhm( 26.0, 7.0, 55.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2010) newmoon = dhm( 15.0, 7.0, 11.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2011) newmoon = dhm( 4.0, 9.0, 3.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2012) newmoon = dhm( 23.0, 7.0, 39.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2013) newmoon = dhm( 11.0, 19.0, 44.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2014) newmoon = dhm( 1.0, 11.0, 14.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2015) newmoon = dhm( 20.0, 13.0, 14.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2016) newmoon = dhm( 10.0, 1.0, 31.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2017) newmoon = dhm( 28.0, 0.0, 7.0 ) - dhm( 1.0, timezone, 0.0 )
+# (2018) newmoon = dhm( 17.0, 2.0, 17.0 ) - dhm( 1.0, timezone, 0.0 )
+newmoon = dhm( 6.0, 1.0, 28.0 ) - dhm( 1.0, timezone, 0.0 )
+ */
+
 // #define ANEW_YEAR	2012
 // #define ANEW_STR	"23:7:39"
 // #define ANEW_YEAR	2017
 // #define ANEW_STR	"28:0:7"
 #define ANEW_YEAR	2019
-#define ANEW_STR	"28:0:7"
+// #define ANEW_STR	"6:1:28"
 
 /* The solar longitude increases about 1 degree per day.
  * The lunar longitude increases about 13 degrees per day.
@@ -1023,10 +1115,21 @@ xx_solar ( void )
 #define TWENTY	(20.0 * DEGRAD)
 
 /* This finds ALL the lunations for a year.
+ * 
+ * for 2019, it prints the first one as follows:
+ *   2019 Jan  6 -- New moon: 1:31:56
+ * however, the routine below (print_anew()) prints this:
+ *   2019 Jan  5 -- New moon: 18:31:56 (ANEW =   4.7722)
+ *
+ * Indeed in local time the new moon is at 18:31 on 1/5
+ * and in UT time it is 1:31 on 1/6
+ *
+ * So, this routine prints times in UT, and that is due to
+ * the "site_greenwich" being specified as the argument to
+ * init_site()
  */
-
 void
-test_anew ( void )
+test_anew ( int year )
 {
 	struct day now;
 	struct day prior;
@@ -1039,7 +1142,6 @@ test_anew ( void )
 	char buf[32];
 	int first = 1;
 	int count = 0;
-	int year = ANEW_YEAR;
 
 	// xx_solar ();
 
@@ -1048,7 +1150,10 @@ test_anew ( void )
 
 	set_day ( &now, year, 1, 1 );
 
-	printf ( "ANEW search for %d -- %s\n", year, ANEW_STR );
+	// printf ( "ANEW search for %d -- %s\n", year, ANEW_STR );
+	// printf ( "ANEW search for %d\n", year );
+	printf ( "Lunations for %d\n", year );
+
 	for ( ;; ) {
 	    sun_apc_ll ( now.mjd0, &s_lat, &s_long, 0 );
 	    moon_apc_ll ( now.mjd0, &m_lat, &m_long );
@@ -1085,11 +1190,92 @@ test_anew ( void )
 	    last_dif = dif;
 	    // m_long_last = m_long;
 	    // if ( ! next_day_m ( &now ) )
-	    if ( ! next_day ( &now ) )
+	    if ( ! next_day_y ( &now ) )
 		break;
 	}
 
 	printf ( "%d lunations\n", count );
+}
+
+/* Here are the UT Times for all the lunations in 2019 as yielded by the above.
+2019 Jan  6 -- New moon: 1:31:56
+2019 Feb  4 -- New moon: 21:08:39
+2019 Mar  6 -- New moon: 16:06:54
+2019 Apr  5 -- New moon: 8:51:08
+2019 May  4 -- New moon: 22:49:23
+2019 Jun  3 -- New moon: 10:04:05
+2019 Jul  2 -- New moon: 19:18:13
+2019 Aug  1 -- New moon: 3:12:29
+2019 Aug 30 -- New moon: 10:37:26
+2019 Sep 28 -- New moon: 18:30:29
+2019 Oct 28 -- New moon: 3:46:01
+2019 Nov 26 -- New moon: 15:13:57
+2019 Dec 26 -- New moon: 5:19:04
+ */
+
+/* This walks forward to the next new moon from the given day
+ */
+void
+next_newm ( int year, int month, int day )
+{
+	struct day now;
+	struct day prior;
+	struct day prior2;
+	double s_lat, s_long;
+	double m_lat, m_long;
+	double dif;
+	double last_dif;
+	double f;
+	char buf[32];
+	int first = 1;
+
+	init_site ( &site_info, &site_mmt );
+
+	set_day ( &now, year, month, day );
+
+	// printf ( "ANEW search for %d -- %s\n", year, ANEW_STR );
+	// printf ( "ANEW search for %d\n", year );
+	// printf ( "Lunations for %d\n", year );
+	printf ( "Next new moon after: %s %d, %d\n", month_name[month-1], day, year );
+
+	for ( ;; ) {
+	    sun_apc_ll ( now.mjd0, &s_lat, &s_long, 0 );
+	    moon_apc_ll ( now.mjd0, &m_lat, &m_long );
+
+	    dif = m_long - s_long;
+	    if ( dif > PI )
+		dif -= TWOPI;
+	    if ( dif < -PI )
+		dif += TWOPI;
+		
+	    // printf ( "%s %2d  %.5f", month_name[now.month-1], now.day, ep->st_midnight );
+	    /*
+	    printf ( "%s %2d", month_name[now.month-1], now.day );
+	    printf ( "  %s (%10.4f)", s_dms(buf,s_long * RADDEG), s_long * RADDEG );
+	    printf ( "  %s (%10.4f)", s_dms(buf,m_long * RADDEG), m_long * RADDEG );
+	    printf ( "  %10.4f", dif * RADDEG );
+	    */
+	    if ( ! first && dif > 0.0 && last_dif < 0.0 ) {
+		// printf ( " ***\n" );
+		prior_day ( &now, &prior );
+		f = -last_dif / (dif - last_dif) * 24.0 + site_info.tz;
+		if ( f < 0.0 ) {
+		    prior_day ( &prior, &prior2 );
+		    f += 24.0;
+		    printf ( "%d %s %2d -- New moon: %s\n", prior2.year, month_name[prior2.month-1], prior2.day, s_dms(buf,f) );
+		} else
+		    printf ( "%d %s %2d -- New moon: %s\n", prior.year, month_name[prior.month-1], prior.day, s_dms(buf,f) );
+		return;
+	    } else {
+		// printf ( "\n" );
+	    }
+
+	    first = 0;
+	    last_dif = dif;
+	    // m_long_last = m_long;
+
+	    next_day ( &now );
+	}
 }
 
 /* Copied and pruned from the above
@@ -1157,10 +1343,11 @@ print_anew ( int year )
 	    first = 0;
 	    last_dif = dif;
 
-	    if ( ! next_day ( &now ) )
+	    if ( ! next_day_y ( &now ) )
 		break;
 	}
 
+	/* i.e. we rolled into the next year */
 	printf ( "BIG trouble in %d\n", year );
 	// return 0.0;
 }
@@ -1486,41 +1673,6 @@ mmt_lst ( double jd )
 }
 #endif
 
-/* Calculate the MJD for a given year, month, and day
- *  For years after 1582, we are using the Gregorian calendar,
- *  so for my purposes we could eliminate the test below.
- * This expects month as 1 .. 12
- * This expects day as 1 ... N
- */
-double 
-calc_mjd ( struct day *tp )
-{
-	int m;
-	int y;
-	int b;
-	int a;
-	double mjd;
-
-	m = tp->month;
-	y = tp->year;
-	if ( m <= 2 ) {
-	    m += 12;
-	    y--;
-	}
-
-	if ( y * 10000 + m * 100 + tp->day <= 15821004 ) {
-	    /* Julian before 1582 */
-	    b = -2 + ((y+4716)/4) - 1179;	/* Julian calendar */
-	} else {
-	    /* Gregorian after 1582, We do this */
-	    b = y/400 - y/100 + y/4;		/* Gregorian calendar */
-	}
-
-	a = 30.6001*(m+1);
-	mjd = 365 * y -679004 + b + a + tp->day;
-	return mjd;
-}
-
 /* Obliquity of the ecliptic
  * t = julian centuries from 2000 January  1 (12h)
  * (Julian century is always 36525 days)
@@ -1763,6 +1915,8 @@ just_today ( int verbose )
 int
 main ( int argc, char **argv )
 {
+	int m;
+
 	// init_site ( &site_info, &site_mmt );
 	// init_site ( &site_info, &site_castellon );
 	init_site ( &site_info, &site_tucson );
@@ -1791,7 +1945,7 @@ main ( int argc, char **argv )
 
 #ifdef notdef
 	printf ( "\n" );
-	test_anew ();
+	test_anew ( 2019 );
 
 	printf ( "\n" );
 	show_old_newm ();
@@ -1800,9 +1954,15 @@ main ( int argc, char **argv )
 	anew_table ();
 #endif
 
+	printf ( "\n" );
 	print_anew ( 2019 );
 	printf ( "\n" );
-	test_anew ();
+	test_anew ( 2019 );
+
+	for ( m=1; m<13; m++ )
+	    next_newm ( 2019, m, 1 );
+	next_newm ( 2018, 12, 28 );
+	next_newm ( 2019, 12, 28 );
 
 	// printf ( "Done\n" );
 }
