@@ -2053,15 +2053,21 @@ void
 generate_almanac ( int year )
 {
 	struct day now;
-	struct ephem_data ephem_xxx;
-	struct ephem_data *ep;
 
 	double sun_rise;
 	double sun_set;
+	double civil_rise;
+	double civil_set;
+	double naut_rise;
+	double naut_set;
+	double astro_rise;
+	double astro_set;
+
 	double next_sun_rise;
 	double next_sun_set;
 	double moon_rise;
 	double moon_set;
+	double st_midnight;
 
 	char buf[32];
 	double ut;
@@ -2073,7 +2079,6 @@ generate_almanac ( int year )
 
 	set_day ( &now, year, 1, 1 );
 
-	ep = &ephem_xxx;
 	do {
 	    if ( now.month != cur_month ) {
 		print_header ();
@@ -2084,12 +2089,12 @@ generate_almanac ( int year )
 	     *  so start with 24.0
 	     */
 	    ut = 24.0 - site_info.tz;
-	    ep->st_midnight = mmt_lst ( now.mjd0 + MJD_OFFSET + ut / 24.0 );
+	    st_midnight = mmt_lst ( now.mjd0 + MJD_OFFSET + ut / 24.0 );
 
 	    rise_set ( &now, SUN_HORIZON, &sun_rise, &sun_set );
-	    rise_set ( &now, CIVIL_HORIZON, &ep->civil_rise, &ep->civil_set );
-	    rise_set ( &now, NAUT_HORIZON, &ep->naut_rise, &ep->naut_set );
-	    rise_set ( &now, ASTRO_HORIZON, &ep->astro_rise, &ep->astro_set );
+	    rise_set ( &now, CIVIL_HORIZON, &civil_rise, &civil_set );
+	    rise_set ( &now, NAUT_HORIZON, &naut_rise, &naut_set );
+	    rise_set ( &now, ASTRO_HORIZON, &astro_rise, &astro_set );
 	    rise_set_moon ( &now, &moon_rise, &moon_set );
 	    age = moon_age ( &now );
 
@@ -2102,15 +2107,15 @@ generate_almanac ( int year )
 	    printf ( "%s %2d", month_name[now.month-1], now.day );
 
 	    printf ( "   %s", s_dm_b(buf,sun_set) );
-	    printf ( "   %s", s_dm_b(buf,ep->civil_set) );
-	    printf ( "   %s", s_dm_b(buf,ep->naut_set) );
-	    printf ( "   %s", s_dm_b(buf,ep->astro_set) );
+	    printf ( "   %s", s_dm_b(buf,civil_set) );
+	    printf ( "   %s", s_dm_b(buf,naut_set) );
+	    printf ( "   %s", s_dm_b(buf,astro_set) );
 
-	    printf ( "  %s", s_dms_b(buf,ep->st_midnight) );
+	    printf ( "  %s", s_dms_b(buf,st_midnight) );
 
-	    printf ( "   %s", s_dm_b(buf,ep->astro_rise) );
-	    printf ( "   %s", s_dm_b(buf,ep->naut_rise) );
-	    printf ( "   %s", s_dm_b(buf,ep->civil_rise) );
+	    printf ( "   %s", s_dm_b(buf,astro_rise) );
+	    printf ( "   %s", s_dm_b(buf,naut_rise) );
+	    printf ( "   %s", s_dm_b(buf,civil_rise) );
 	    printf ( "   %s", s_dm_b(buf,sun_rise) );
 
 	    /* We only print moon rise/set times that happen in dark hours.
@@ -2119,21 +2124,19 @@ generate_almanac ( int year )
 	     * the next days sunrise.
 	     */
 	    if ( moon_rise < 12.0 && moon_rise > next_sun_rise )
-		printf ( "        " );
+		printf ( "         " );
 	    else if ( moon_rise >= 12.0 && moon_rise < sun_set )
-		printf ( "        " );
+		printf ( "         " );
 	    else
 		printf ( "   %s", s_dm_b(buf,moon_rise) );
 
 	    if ( moon_set < 12.0 && moon_set > next_sun_rise )
-		printf ( "        " );
+		printf ( "         " );
 	    else if ( moon_set >= 12.0 && moon_set < sun_set )
-		printf ( "        " );
+		printf ( "         " );
 	    else
 		printf ( "   %s", s_dm_b(buf,moon_set) );
 
-	    // printf ( "   %s", s_dm_b(buf,ep->moon_rise) );
-	    // printf ( "   %s", s_dm_b(buf,ep->moon_set) );
 	    printf ( "   %5.1f", age );
 
 	    printf ( "\n" );
