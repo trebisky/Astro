@@ -2098,13 +2098,15 @@ generate_almanac ( int year )
 	    rise_set_moon ( &now, &moon_rise, &moon_set );
 	    age = moon_age ( &now );
 
+	    /* Print this info before we bump the day */
+	    printf ( "%s %2d", month_name[now.month-1], now.day );
+
 	    /* We need the next day sunrise time to decide if moonrises
 	     * and moonsets are in day or night.
 	     */
 	    status = next_day_y ( &now );
 	    rise_set ( &now, SUN_HORIZON, &next_sun_rise, &next_sun_set );
 
-	    printf ( "%s %2d", month_name[now.month-1], now.day );
 
 	    printf ( "   %s", s_dm_b(buf,sun_set) );
 	    printf ( "   %s", s_dm_b(buf,civil_set) );
@@ -2123,6 +2125,7 @@ generate_almanac ( int year )
 	     * the next, so we need to check against this days sunset and
 	     * the next days sunrise.
 	     */
+#ifdef notdef
 	    if ( moon_rise < 12.0 && moon_rise > next_sun_rise )
 		printf ( "         " );
 	    else if ( moon_rise >= 12.0 && moon_rise < sun_set )
@@ -2136,6 +2139,20 @@ generate_almanac ( int year )
 		printf ( "         " );
 	    else
 		printf ( "   %s", s_dm_b(buf,moon_set) );
+#endif
+
+	    if ( moon_rise > next_sun_rise && moon_rise < sun_set )
+		printf ( "         " );
+	    else
+		printf ( "   %s", s_dm_b(buf,moon_rise) );
+
+	    if ( moon_set > next_sun_rise && moon_set < sun_set )
+		printf ( "         " );
+	    else
+		printf ( "   %s", s_dm_b(buf,moon_set) );
+
+	    // printf ( "   %s", s_dm_b(buf,moon_rise) );
+	    // printf ( "   %s", s_dm_b(buf,moon_set) );
 
 	    printf ( "   %5.1f", age );
 
