@@ -162,6 +162,7 @@ void test_almanac ( void );
 void test_anew ( int );
 void anew_table ( void );
 void show_old_newm ( void );
+char * get_today_str ( void );
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -2043,11 +2044,59 @@ test_almanac ( void )
 }
 #endif
 
+/* Main header */
+char mh1[] = "                                         Observer's Almanac -- %4d -- MMT Observatory\n";
+char mh2[] = "                                 Latitude=+31d 41m 19.6s  Longitude= 110d 53m 04.4s\n";
+char mh3[] = "                                           Elevation=2600 m (8585 ft)  Time Zone=+7h\n";
+// char mh4[] = "                                                Tom Trebisky, November 27, 2019\n";
+char mh4[] = "                                                %s, %s\n";
+
+/* Column headers */
+char ch1[] = "     2019          Sun     Sun     Sun    RA 3H                RA 3H    Sun     Sun     Sun              Moon    Moon    Moon Age";
+char ch2[] = " Date    Sunset   6 Deg   12 Deg  18 Deg  West at  Sid Time    East at 18 Deg  12 Deg  6 Deg  Sunrise    rise    set       at";
+char ch3[] = "                  W Hrz   W Hrz   W Hrz   18 Deg   Midnight    18 Deg  E Hrz   E Hrz   E Hrz                            Midnight";
+
+// #define FORM_FEED 0x0c
+
+static char person[] = "Tom Trebisky";
+
 static void
-print_header ( void )
+print_header ( int year, int first )
 {
-	printf ( " --HEADER\n" );
+	char *timestamp;
+
+	timestamp = get_today_str ();
+
+	if ( first )
+	    printf ( "\n" );
+	else
+	    printf ( "\f\n" );
+
+
+	printf ( "\n" );
+	printf ( "\n" );
+	printf ( "\n" );
+	printf ( mh1, year );
+	printf ( mh2 );
+	printf ( mh3 );
+	printf ( mh4, person, timestamp );
+	printf ( "\n" );
+	printf ( "\n" );
+	printf ( "\n" );
+	printf ( "\n" );
+	printf ( "\n" );
+	printf ( "%s\n", ch1 );
+	printf ( "%s\n", ch2 );
+	printf ( "%s\n", ch3 );
+	printf ( "\n" );
+	printf ( "\n" );
 }
+
+/* I personally prefer to see the moonrise/set times even in daylight,
+ * to get it that way, I need to set this to zero.
+ */
+int dark_only = 1;
+// int dark_only = 0;
 
 void
 generate_almanac ( int year )
@@ -2067,6 +2116,10 @@ generate_almanac ( int year )
 	double next_sun_set;
 	double moon_rise;
 	double moon_set;
+
+	double sun_3w;
+	double sun_3e;
+
 	double st_midnight;
 
 	char buf[32];
@@ -2074,6 +2127,7 @@ generate_almanac ( int year )
 	double age;
 	int cur_month = 0;
 	int status;
+	int first = 1;
 
 	init_site ( &site_info, &site_mmt );
 
@@ -2081,7 +2135,8 @@ generate_almanac ( int year )
 
 	do {
 	    if ( now.month != cur_month ) {
-		print_header ();
+		print_header ( year, first );
+		first = 0;
 		cur_month = now.month;
 	    }
 
@@ -2095,6 +2150,8 @@ generate_almanac ( int year )
 	    rise_set ( &now, CIVIL_HORIZON, &civil_rise, &civil_set );
 	    rise_set ( &now, NAUT_HORIZON, &naut_rise, &naut_set );
 	    rise_set ( &now, ASTRO_HORIZON, &astro_rise, &astro_set );
+	    sun_3w = 0.0;
+	    sun_3e = 0.0;
 	    rise_set_moon ( &now, &moon_rise, &moon_set );
 	    age = moon_age ( &now );
 
@@ -2109,16 +2166,18 @@ generate_almanac ( int year )
 
 
 	    printf ( "   %s", s_dm_b(buf,sun_set) );
-	    printf ( "   %s", s_dm_b(buf,civil_set) );
-	    printf ( "   %s", s_dm_b(buf,naut_set) );
-	    printf ( "   %s", s_dm_b(buf,astro_set) );
+	    printf ( "  %s", s_dm_b(buf,civil_set) );
+	    printf ( "  %s", s_dm_b(buf,naut_set) );
+	    printf ( "  %s", s_dm_b(buf,astro_set) );
+	    printf ( "  %s", s_dm_b(buf,sun_3w) );
 
-	    printf ( "  %s", s_dms_b(buf,st_midnight) );
+	    printf ( "   %s", s_dms_b(buf,st_midnight) );
 
-	    printf ( "   %s", s_dm_b(buf,astro_rise) );
-	    printf ( "   %s", s_dm_b(buf,naut_rise) );
-	    printf ( "   %s", s_dm_b(buf,civil_rise) );
-	    printf ( "   %s", s_dm_b(buf,sun_rise) );
+	    printf ( "   %s", s_dm_b(buf,sun_3e) );
+	    printf ( "  %s", s_dm_b(buf,astro_rise) );
+	    printf ( "  %s", s_dm_b(buf,naut_rise) );
+	    printf ( "  %s", s_dm_b(buf,civil_rise) );
+	    printf ( "  %s", s_dm_b(buf,sun_rise) );
 
 	    /* We only print moon rise/set times that happen in dark hours.
 	     * Our moon events are found in the interval from this noon to
@@ -2141,18 +2200,18 @@ generate_almanac ( int year )
 		printf ( "   %s", s_dm_b(buf,moon_set) );
 #endif
 
-	    if ( moon_rise > next_sun_rise && moon_rise < sun_set )
-		printf ( "         " );
+	    if ( dark_only && moon_rise > next_sun_rise && moon_rise < sun_set )
+		printf ( "          " );
 	    else
-		printf ( "   %s", s_dm_b(buf,moon_rise) );
+		printf ( "    %s", s_dm_b(buf,moon_rise) );
 
-	    if ( moon_set > next_sun_rise && moon_set < sun_set )
-		printf ( "         " );
+	    if ( dark_only && moon_set > next_sun_rise && moon_set < sun_set )
+		printf ( "        " );
 	    else
-		printf ( "   %s", s_dm_b(buf,moon_set) );
+		printf ( "  %s", s_dm_b(buf,moon_set) );
 
-	    // printf ( "   %s", s_dm_b(buf,moon_rise) );
-	    // printf ( "   %s", s_dm_b(buf,moon_set) );
+	    // printf ( "    %s", s_dm_b(buf,moon_rise) );
+	    // printf ( "  %s", s_dm_b(buf,moon_set) );
 
 	    printf ( "   %5.1f", age );
 
@@ -2179,6 +2238,20 @@ set_today ( struct day *today )
 	set_day ( today, 1900 + info->tm_year, 1 + info->tm_mon, info->tm_mday );
 }
 
+char *
+get_today_str ( void )
+{
+	time_t now;
+	struct tm *info;
+	static char buf[100];
+
+	time( &now );
+	info = localtime( &now );
+
+	sprintf ( buf, "%s %d, %d\n", month_name_full[info->tm_mon], info->tm_mday, 1900 + info->tm_year );
+	return buf;
+}
+
 void
 just_today ( int verbose )
 {
@@ -2197,7 +2270,7 @@ just_today ( int verbose )
 
 	set_today ( &now );
 
-	printf ("%s %d %d\n", month_name_full[now.month-1], now.day, now.year );
+	printf ("%s %d, %d\n", month_name_full[now.month-1], now.day, now.year );
 
 	ep = ephem_info;
 	rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
@@ -2264,7 +2337,7 @@ main ( int argc, char **argv )
 	test_anew ( 2019 );
 #endif
 
-	just_today ( 0 );
+	// just_today ( 0 );
 
 	generate_almanac ( 2019 );
 
