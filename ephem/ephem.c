@@ -543,9 +543,13 @@ hd_to_aa ( double ha, double dec, double *alt, double *az )
 	*az = 0.0;	/* XXX */
 }
 
+struct sun_info {
+	double alt;
+	double lst;
+};
 
 /* Returns the suns elevation above the horizon in degrees */
-static double
+static struct sun_info *
 sun_alt ( struct day *now, double hour, int verbose )
 {
 	double jd;
@@ -557,6 +561,7 @@ sun_alt ( struct day *now, double hour, int verbose )
 	double ra, dec;
 	double sinalt;
 	double alt, az;
+	static struct sun_info info;
 
 	// printf ( " MJD = %.2f\n", now->mjd );
 	/*
@@ -598,7 +603,10 @@ sun_alt ( struct day *now, double hour, int verbose )
 	if ( verbose  )
 	    printf ( "Hour: %10.4f, JD = %.2f, LST = %s RA = %.3f HA = %.2f -- alt: %.3f\n", hour, jd, s_dms(buf,lst), ra, ha, alt );
 
-	return alt;
+	info.alt = alt;
+	info.lst = lst;
+	return &info;
+	// return alt;
 }
 
 /* Returns the elevation of the moon above the horizon in degrees */
@@ -680,19 +688,23 @@ sun_events ( struct day *now, double horizon,
 	double xe, ye, r1, r2;
 	int nr;
 	int rises, sets, above;
+	struct sun_info *si;
 
 	rises = 0;
 	sets = 0;
 	above = 0;
 	hour = 1.0;
 
-	ya = sun_alt ( now, hour - 1.0, 0 ) - horizon;
+	si = sun_alt ( now, hour - 1.0, 0 );
+	ya = si->alt - horizon;
 	if ( ya > 0.0 )
 	    above = 1;
 
 	do {
-	    yb = sun_alt ( now, hour, 0 ) - horizon;
-	    yc = sun_alt ( now, hour + 1.0, 0 ) - horizon;
+	    si = sun_alt ( now, hour, 0 );
+	    yb = si->alt - horizon;
+	    si = sun_alt ( now, hour + 1.0, 0 );
+	    yc = si->alt - horizon;
 	    nr = quad ( ya, yb, yc, &xe, &ye, &r1, &r2 );
 	    // printf ( "abc = %.3f %.3f %.3f  %d\n", ya, yb, yc, nr );
 	    if ( nr == 1 ) {
