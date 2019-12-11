@@ -24,6 +24,9 @@ $(BASE).pdf:	$(BASE).ps
 ephem:	ephem.c
 	cc -o ephem ephem.c -lm
 
+install: ephem
+	cp ephem /home/tom/bin
+
 clean:
 	rm -f *.o ephem
 	rm -f *.ps *.txt *.pdf

@@ -2416,10 +2416,10 @@ main ( int argc, char **argv )
 	test_anew ( 2019 );
 #endif
 
-	// just_today ( 0 );
+	just_today ( 0 );
 
 	// generate_almanac ( 2019 );
-	generate_almanac ( 2020 );
+	// generate_almanac ( 2020 );
 	// generate_almanac ( 2021 );
 
 	// printf ( "Done\n" );
