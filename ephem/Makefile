@@ -7,7 +7,8 @@
 # enscript to wrap lines.
 FONT = Courier9
 
-BASE=almn19
+# Change this name for a new year
+BASE=almn20
 
 all:	$(BASE).ps $(BASE).pdf
 

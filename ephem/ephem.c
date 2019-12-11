@@ -781,6 +781,10 @@ moon_events ( struct day *now, double horizon,
 	sets = 0;
 	above = 0;
 
+	/* With these, the above flags may be unnecessary */
+	*lt_rise = 99.0;
+	*lt_set = 99.0;
+
 	hour = 13.0;
 
 	ya = moon_alt ( now, hour - 1.0, 0 ) - horizon;
@@ -2186,6 +2190,7 @@ generate_almanac ( int year )
 	int cur_month = 0;
 	int status;
 	int first = 1;
+	int blank_rise, blank_set;
 
 	init_site ( &site_info, &site_mmt );
 
@@ -2253,29 +2258,29 @@ generate_almanac ( int year )
 	     * Our moon events are found in the interval from this noon to
 	     * the next, so we need to check against this days sunset and
 	     * the next days sunrise.
+	     * Also!  We may not even have a valid rise or set in our
+	     * 24 hour period (this doesn't happen for the sun at our latitude.
+	     * Check for our 99.0 sentinel for no event.
 	     */
-#ifdef notdef
-	    if ( moon_rise < 12.0 && moon_rise > next_sun_rise )
-		printf ( "         " );
-	    else if ( moon_rise >= 12.0 && moon_rise < sun_set )
-		printf ( "         " );
-	    else
-		printf ( "   %s", s_dm_b(buf,moon_rise) );
 
-	    if ( moon_set < 12.0 && moon_set > next_sun_rise )
-		printf ( "         " );
-	    else if ( moon_set >= 12.0 && moon_set < sun_set )
-		printf ( "         " );
-	    else
-		printf ( "   %s", s_dm_b(buf,moon_set) );
-#endif
-
+	    blank_rise = 0;
+	    if ( moon_rise > 50.0 )
+		blank_rise = 1;
 	    if ( dark_only && moon_rise > next_sun_rise && moon_rise < sun_set )
+		blank_rise = 1;
+
+	    if ( blank_rise )
 		printf ( "          " );
 	    else
 		printf ( "    %s", s_dm_b(buf,moon_rise) );
 
+	    blank_set = 0;
+	    if ( moon_set > 50.0 )
+		blank_set = 1;
 	    if ( dark_only && moon_set > next_sun_rise && moon_set < sun_set )
+		blank_set = 1;
+
+	    if ( blank_set )
 		printf ( "        " );
 	    else
 		printf ( "  %s", s_dm_b(buf,moon_set) );
@@ -2413,7 +2418,9 @@ main ( int argc, char **argv )
 
 	// just_today ( 0 );
 
+	// generate_almanac ( 2019 );
 	generate_almanac ( 2020 );
+	// generate_almanac ( 2021 );
 
 	// printf ( "Done\n" );
 }
