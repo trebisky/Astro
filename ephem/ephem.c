@@ -2102,9 +2102,9 @@ char mh3[] = "                                           Elevation=2600 m (8585 
 char mh4[] = "                                                %s, %s\n";
 
 /* Column headers */
-char ch1[] = "     2019          Sun     Sun     Sun    RA 3H                RA 3H    Sun     Sun     Sun              Moon    Moon    Moon Age";
-char ch2[] = " Date    Sunset   6 Deg   12 Deg  18 Deg  West at  Sid Time    East at 18 Deg  12 Deg  6 Deg  Sunrise    rise    set       at";
-char ch3[] = "                  W Hrz   W Hrz   W Hrz   18 Deg   Midnight    18 Deg  E Hrz   E Hrz   E Hrz                            Midnight";
+char ch1[] = "     %4d          Sun     Sun     Sun    RA 3H                RA 3H    Sun     Sun     Sun              Moon    Moon    Moon Age\n";
+char ch2[] = " Date    Sunset   6 Deg   12 Deg  18 Deg  West at  Sid Time    East at 18 Deg  12 Deg  6 Deg  Sunrise    rise    set       at\n";
+char ch3[] = "                  W Hrz   W Hrz   W Hrz   18 Deg   Midnight    18 Deg  E Hrz   E Hrz   E Hrz                            Midnight\n";
 
 // #define FORM_FEED 0x0c
 
@@ -2135,9 +2135,9 @@ print_header ( int year, int first )
 	printf ( "\n" );
 	printf ( "\n" );
 	printf ( "\n" );
-	printf ( "%s\n", ch1 );
-	printf ( "%s\n", ch2 );
-	printf ( "%s\n", ch3 );
+	printf ( ch1, year );
+	printf ( ch2 );
+	printf ( ch3 );
 	printf ( "\n" );
 	printf ( "\n" );
 }
@@ -2161,6 +2161,8 @@ generate_almanac ( int year )
 	double naut_set;
 	double astro_rise;
 	double astro_set;
+
+	double bogus_sun_set;
 
 	double next_sun_rise;
 	double next_sun_set;
@@ -2202,12 +2204,16 @@ generate_almanac ( int year )
 	    ut = 24.0 - site_info.tz;
 	    st_midnight = mmt_lst ( now.mjd0 + MJD_OFFSET + ut / 24.0 );
 
+	    /* We will overwrite these rise times below */
 	    rise_set ( &now, SUN_HORIZON, &sun_rise, &sun_set, &lst_rise_bogus, &lst_set_bogus );
 	    rise_set ( &now, CIVIL_HORIZON, &civil_rise, &civil_set, &lst_rise_bogus, &lst_set_bogus );
 	    rise_set ( &now, NAUT_HORIZON, &naut_rise, &naut_set, &lst_rise_bogus, &lst_set_bogus );
-	    rise_set ( &now, ASTRO_HORIZON, &astro_rise, &astro_set, &lst_rise_18, &lst_set_18 );
-	    sun_3w = 0.0;
-	    sun_3e = 0.0;
+	    rise_set ( &now, ASTRO_HORIZON, &astro_rise, &astro_set, &lst_rise_bogus, &lst_set_18 );
+
+	    sun_3w = lst_set_18 - 3.0;
+	    if ( sun_3w > 24.0 ) sun_3w -= 24.0;
+	    if ( sun_3w < 0.0 ) sun_3w += 24.0;
+
 	    rise_set_moon ( &now, &moon_rise, &moon_set );
 	    age = moon_age ( &now );
 
@@ -2216,10 +2222,18 @@ generate_almanac ( int year )
 
 	    /* We need the next day sunrise time to decide if moonrises
 	     * and moonsets are in day or night.
+	     * As a matter of fact, we need next day sunrise times overall.
 	     */
 	    status = next_day_y ( &now );
-	    rise_set ( &now, SUN_HORIZON, &next_sun_rise, &next_sun_set, &lst_rise_bogus, &lst_set_bogus );
+	    rise_set ( &now, SUN_HORIZON, &sun_rise, &bogus_sun_set, &lst_rise_bogus, &lst_set_bogus );
+	    rise_set ( &now, CIVIL_HORIZON, &civil_rise, &bogus_sun_set, &lst_rise_bogus, &lst_set_bogus );
+	    rise_set ( &now, NAUT_HORIZON, &naut_rise, &bogus_sun_set, &lst_rise_bogus, &lst_set_bogus );
+	    rise_set ( &now, ASTRO_HORIZON, &astro_rise, &bogus_sun_set, &lst_rise_18, &lst_set_bogus );
+	    next_sun_rise = sun_rise;
 
+	    sun_3e = lst_rise_18 + 3.0;
+	    if ( sun_3e > 24.0 ) sun_3e -= 24.0;
+	    if ( sun_3e < 0.0 ) sun_3e += 24.0;
 
 	    printf ( "   %s", s_dm_b(buf,sun_set) );
 	    printf ( "  %s", s_dm_b(buf,civil_set) );
@@ -2399,7 +2413,7 @@ main ( int argc, char **argv )
 
 	// just_today ( 0 );
 
-	generate_almanac ( 2019 );
+	generate_almanac ( 2020 );
 
 	// printf ( "Done\n" );
 }
