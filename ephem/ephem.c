@@ -676,65 +676,89 @@ quad ( double ya, double yb, double yc, double *xe, double *ye, double *r1, doub
 	return nr;
 }
 
+struct sun_event_info {
+	double lt_rise;		/* local time of rise */
+	double lt_set;		/* local time of set */
+	double lst_rise;	/* LST of rise */
+	double lst_set;		/* LST of set */
+	int rises;
+	int sets;
+	int above;
+};
+
 /* Find the sunrise and sunset times for a given day.
  */
-static void
-sun_events ( struct day *now, double horizon,
+static struct sun_event_info *
+sun_events ( struct day *now, double horizon )
+/*
 	double *lt_rise, double *lt_set,
 	int *arises, int *asets, int *aabove )
+    */
 {
 	double ya, yb, yc;
 	double hour;
 	double xe, ye, r1, r2;
 	int nr;
-	int rises, sets, above;
+	static struct sun_event_info info;
 	struct sun_info *si;
 
-	rises = 0;
-	sets = 0;
-	above = 0;
+	info.rises = 0;
+	info.sets = 0;
+	info.above = 0;
+
 	hour = 1.0;
 
 	si = sun_alt ( now, hour - 1.0, 0 );
 	ya = si->alt - horizon;
 	if ( ya > 0.0 )
-	    above = 1;
+	    info.above = 1;
 
 	do {
 	    si = sun_alt ( now, hour, 0 );
 	    yb = si->alt - horizon;
 	    si = sun_alt ( now, hour + 1.0, 0 );
 	    yc = si->alt - horizon;
+
 	    nr = quad ( ya, yb, yc, &xe, &ye, &r1, &r2 );
 	    // printf ( "abc = %.3f %.3f %.3f  %d\n", ya, yb, yc, nr );
 	    if ( nr == 1 ) {
 		if ( ya < 0.0 ) {
-		    *lt_rise = hour + r1;
-		    rises = 1;
+		    info.lt_rise = hour + r1;
+		    info.rises = 1;
+		    si = sun_alt ( now, hour + r1, 0 );
+		    info.lst_rise = si->lst;
 		} else {
-		    *lt_set = hour + r1;
-		    sets = 1;
+		    info.lt_set = hour + r1;
+		    info.sets = 1;
+		    si = sun_alt ( now, hour + r1, 0 );
+		    info.lst_set = si->lst;
 		}
 	    }
 	    if ( nr == 2 ) {
 		if ( ye < 0.0 ) {
-		    *lt_rise = hour + r2;
-		    *lt_set = hour + r1;
+		    info.lt_rise = hour + r2;
+		    info.lt_set = hour + r1;
+		    si = sun_alt ( now, hour + r2, 0 );
+		    info.lst_rise = si->lst;
+		    si = sun_alt ( now, hour + r1, 0 );
+		    info.lst_set = si->lst;
 		} else {
-		    *lt_rise = hour + r1;
-		    *lt_set = hour + r2;
+		    info.lt_rise = hour + r1;
+		    info.lt_set = hour + r2;
+		    si = sun_alt ( now, hour + r1, 0 );
+		    info.lst_rise = si->lst;
+		    si = sun_alt ( now, hour + r2, 0 );
+		    info.lst_set = si->lst;
 		}
-		rises = 1;
-		sets = 1;
+		info.rises = 1;
+		info.sets = 1;
 	    }
 
 	    ya = yc;
 	    hour += 2.0;
-	} while ( hour < 25.0 && rises + sets < 2 );
+	} while ( hour < 25.0 && info.rises + info.sets < 2 );
 
-	*arises = rises;
-	*asets = sets;
-	*aabove = above;
+	return &info;
 }
 
 /* Find the sunrise and sunset times for a given day.
@@ -900,16 +924,20 @@ test_sun3a ( void )
 	struct day now;
 	double rise_hour;
 	double set_hour;
-	int rises, sets, above;
+	// int rises, sets, above;
 	double horizon;
 	char buf[32];
+	struct sun_event_info *se;
 
 	init_site ( &site_info, &site_castellon );
 	set_day ( &now, SUN3A_YEAR, SUN3A_MONTH, SUN3A_DAY );
 
 	horizon = SUN_HORIZON;
 
-	sun_events ( &now, horizon, &rise_hour, &set_hour, &rises, &sets, &above );
+	// sun_events ( &now, horizon, &rise_hour, &set_hour, &rises, &sets, &above );
+	se = sun_events ( &now, horizon );
+	rise_hour = se->lt_rise;
+	set_hour = se->lt_set;
 
 /*
  *  I get:
@@ -950,16 +978,20 @@ test_sun3b ( void )
 	struct day now;
 	double rise_hour;
 	double set_hour;
-	int rises, sets, above;
+	// int rises, sets, above;
 	double horizon;
 	char buf[32];
+	struct sun_event_info *se;
 
 	init_site ( &site_info, &site_mmt );
 	set_day ( &now, SUN3B_YEAR, SUN3B_MONTH, SUN3B_DAY );
 
 	horizon = SUN_HORIZON;
 
-	sun_events ( &now, horizon, &rise_hour, &set_hour, &rises, &sets, &above );
+	// sun_events ( &now, horizon, &rise_hour, &set_hour, &rises, &sets, &above );
+	se = sun_events ( &now, horizon );
+	rise_hour = se->lt_rise;
+	set_hour = se->lt_set;
 
 	printf ( "\n" );
 	printf ( "Location: %s\n", site_info.name );
@@ -981,11 +1013,17 @@ test_sun3b ( void )
 }
 
 static void
-rise_set ( struct day *now, double h, double *rh, double *sh )
+rise_set ( struct day *now, double h, double *rh, double *sh, double *lst_r, double *lst_s )
 {
-	int rises, sets, above;
+	// int rises, sets, above;
+	struct sun_event_info *se;
 
-	sun_events ( now, h, rh, sh, &rises, &sets, &above );
+	// sun_events ( now, h, rh, sh, &rises, &sets, &above );
+	se = sun_events ( now, h );
+	*rh = se->lt_rise;
+	*sh = se->lt_set;
+	*lst_r = se->lst_rise;
+	*lst_s = se->lst_set;
 }
 
 static void
@@ -2129,6 +2167,12 @@ generate_almanac ( int year )
 	double moon_rise;
 	double moon_set;
 
+	double lst_rise_bogus;
+	double lst_set_bogus;
+
+	double lst_rise_18;
+	double lst_set_18;
+
 	double sun_3w;
 	double sun_3e;
 
@@ -2158,10 +2202,10 @@ generate_almanac ( int year )
 	    ut = 24.0 - site_info.tz;
 	    st_midnight = mmt_lst ( now.mjd0 + MJD_OFFSET + ut / 24.0 );
 
-	    rise_set ( &now, SUN_HORIZON, &sun_rise, &sun_set );
-	    rise_set ( &now, CIVIL_HORIZON, &civil_rise, &civil_set );
-	    rise_set ( &now, NAUT_HORIZON, &naut_rise, &naut_set );
-	    rise_set ( &now, ASTRO_HORIZON, &astro_rise, &astro_set );
+	    rise_set ( &now, SUN_HORIZON, &sun_rise, &sun_set, &lst_rise_bogus, &lst_set_bogus );
+	    rise_set ( &now, CIVIL_HORIZON, &civil_rise, &civil_set, &lst_rise_bogus, &lst_set_bogus );
+	    rise_set ( &now, NAUT_HORIZON, &naut_rise, &naut_set, &lst_rise_bogus, &lst_set_bogus );
+	    rise_set ( &now, ASTRO_HORIZON, &astro_rise, &astro_set, &lst_rise_18, &lst_set_18 );
 	    sun_3w = 0.0;
 	    sun_3e = 0.0;
 	    rise_set_moon ( &now, &moon_rise, &moon_set );
@@ -2174,7 +2218,7 @@ generate_almanac ( int year )
 	     * and moonsets are in day or night.
 	     */
 	    status = next_day_y ( &now );
-	    rise_set ( &now, SUN_HORIZON, &next_sun_rise, &next_sun_set );
+	    rise_set ( &now, SUN_HORIZON, &next_sun_rise, &next_sun_set, &lst_rise_bogus, &lst_set_bogus );
 
 
 	    printf ( "   %s", s_dm_b(buf,sun_set) );
@@ -2273,6 +2317,10 @@ just_today ( int verbose )
 	char buf2[32];
 	double age;
 
+	/* values never used */
+	double lst_rise;
+	double lst_set;
+
 	init_site ( &site_info, &site_mmt );
 
 	// int year = 2019;
@@ -2285,7 +2333,7 @@ just_today ( int verbose )
 	printf ("%s %d, %d\n", month_name_full[now.month-1], now.day, now.year );
 
 	ep = ephem_info;
-	rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set );
+	rise_set ( &now, SUN_HORIZON, &ep->sun_rise, &ep->sun_set, &lst_rise, &lst_set );
 	rise_set_moon ( &now, &ep->moon_rise, &ep->moon_set );
 
 	printf ( "Sunrise: %s  (%s)\n", s_dms(buf1,ep->sun_rise), s_dm(buf2,ep->sun_rise) );
