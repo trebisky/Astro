@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 
 /* ephem.c
  * Ephemeris and Almanac calculations.
@@ -2367,6 +2368,33 @@ just_today ( int verbose )
 
 /* ---------------------------------------------------------- */
 
+enum what {
+    TODAY,
+    ALMANAC
+};
+
+enum what main_option = TODAY;
+int almanac_year = 2019;
+
+/* A simple but clumsy option parser */
+void
+set_options ( int argc, char **argv )
+{
+	char *p;
+
+	while ( argc-- ) {
+	    p = *argv++;
+	    if ( *p != '-' )
+		continue;
+	    p++;
+	    if ( *p == 'a' ) {
+		main_option = ALMANAC;
+		// printf ( "YEAR %d\n", atol ( p + 1 ) );
+		almanac_year = atol ( p + 1 );
+	    }
+	}
+}
+
 int
 main ( int argc, char **argv )
 {
@@ -2375,6 +2403,8 @@ main ( int argc, char **argv )
 	// init_site ( &site_info, &site_mmt );
 	// init_site ( &site_info, &site_castellon );
 	init_site ( &site_info, &site_tucson );
+
+	set_options ( argc - 1, argv + 1 );
 
 #ifdef notdef
 	test_jd ();
@@ -2416,7 +2446,11 @@ main ( int argc, char **argv )
 	test_anew ( 2019 );
 #endif
 
-	just_today ( 0 );
+	if ( main_option == TODAY )
+	    just_today ( 0 );
+
+	if ( main_option == ALMANAC )
+	    generate_almanac ( almanac_year );
 
 	// generate_almanac ( 2019 );
 	// generate_almanac ( 2020 );

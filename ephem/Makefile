@@ -7,13 +7,17 @@
 # enscript to wrap lines.
 FONT = Courier9
 
+# Set this to last 2 digits of the desired year.
+Y = 17
+
 # Change this name for a new year
-BASE=almn20
+BASE=almn$(Y)
+YEAR = 20$(Y)
 
 all:	$(BASE).ps $(BASE).pdf
 
 $(BASE).txt:	ephem
-	./ephem > $(BASE).txt
+	./ephem -a$(YEAR)> $(BASE).txt
 
 $(BASE).ps:	$(BASE).txt
 	enscript --landscape --no-header --font $(FONT) --output=$(BASE).ps $(BASE).txt
