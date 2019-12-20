@@ -8,7 +8,7 @@
 FONT = Courier9
 
 # Set this to last 2 digits of the desired year.
-Y = 17
+Y = 20
 
 # Change this name for a new year
 BASE=almn$(Y)

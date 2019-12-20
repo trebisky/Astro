@@ -231,6 +231,9 @@ calc_mjd ( struct day *tp )
 	return mjd;
 }
 
+/* This is independent of time zone since we never
+ * deal with hours.
+ */
 void
 set_day ( struct day *tp, int y, int m, int d )
 {
@@ -2020,15 +2023,22 @@ moon_age ( struct day *d )
 	double newm_prior;
 	double age;
 	double age_prior;
+	double today;
 
-	//printf ( "MJD cur : %14.4f\n", d->mjd0 );
-	newm = next_newm_mjd ( d->mjd0 );
-	//printf ( "MJD newm: %14.4f\n", newm );
+	/* mjd0 is for midnight the night before,
+	 * but we want midnight tonight, so add 24 hours (1.0 day).
+	 * but we want midnight locat time, so subtact the TZ.
+	 */
+	today = d->mjd0 + 1.0 - site_info.tz / 24.0;
+
+	//printf ( "MJD cur --- : %14.4f\n", today );
+	newm = next_newm_mjd ( today );
+	//printf ( "MJD nxt newm: %14.4f\n", newm );
 	newm_prior = next_newm_mjd ( newm - SYNODIC_JOG );
-	//printf ( "MJD newm: %14.4f\n", newm_prior );
+	//printf ( "MJD pri newm: %14.4f\n", newm_prior );
 
-	age = newm - d->mjd0;
-	age_prior =  d->mjd0 - newm_prior;
+	age = newm - today;
+	age_prior =  today - newm_prior;
 
 	if ( age < age_prior )
 	    return -age;
